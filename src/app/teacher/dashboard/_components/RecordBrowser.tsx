@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { exportToExcel, getQuizResultsBySchool, getQuizAssignments, deleteRecordsByDateAndItem } from '@/lib/store';
-import type { Student, MeasurementItem, MeasurementRecord, QuizResult, QuizAssignment } from '@/lib/types';
+import type { Student, MeasurementItem, MeasurementRecord, QuizResult, QuizAssignment, SportsClub } from '@/lib/types';
 import { getPapsGrade, calculatePapsScore, getCustomItemGrade } from '@/lib/paps';
 import { calculateRanks } from '@/lib/store';
 import {
@@ -44,6 +44,7 @@ interface RecordBrowserProps {
   allStudents: Student[];
   allItems: MeasurementItem[];
   allRecords: MeasurementRecord[];
+  sportsClubs: SportsClub[];
 }
 
 type ViewType = 'grade' | 'score' | 'record';
@@ -73,12 +74,14 @@ export default function RecordBrowser({
   allStudents,
   allItems,
   allRecords,
+  sportsClubs,
 }: RecordBrowserProps) {
   const { toast } = useToast();
   const { school } = useAuth();
 
   const [gradeFilter, setGradeFilter] = useState('all');
   const [classNumFilter, setClassNumFilter] = useState('all');
+  const [selectedClubId, setSelectedClubId] = useState('all');
   const [dateFilter, setDateFilter] = useState<Date | 'latest' | undefined>('latest');
   const [viewType, setViewType] = useState<ViewType>('grade');
   
@@ -142,8 +145,12 @@ export default function RecordBrowser({
   const selectedItemInfo = useMemo(() => allItems.find(i => i.name === selectedItem), [selectedItem, allItems]);
 
   const studentPapsTableData = useMemo(() => {
-     let filteredStudents = allStudents;
-    if (gradeFilter !== 'all') {
+    let filteredStudents = allStudents;
+    
+    if (selectedClubId !== 'all') {
+      const club = sportsClubs.find(c => c.id === selectedClubId);
+      if (club) filteredStudents = filteredStudents.filter(s => club.memberIds.includes(s.id));
+    } else if (gradeFilter !== 'all') {
       filteredStudents = filteredStudents.filter(s => s.grade === gradeFilter);
       if (classNumFilter !== 'all') {
         filteredStudents = filteredStudents.filter(s => s.classNum === classNumFilter);
@@ -233,7 +240,7 @@ export default function RecordBrowser({
       
       return studentData;
     });
-  }, [allStudents, allRecords, allItems, gradeFilter, classNumFilter, dateFilter, viewType]);
+  }, [allStudents, allRecords, allItems, gradeFilter, classNumFilter, selectedClubId, sportsClubs, dateFilter, viewType]);
 
   const sortedPapsData = useMemo(() => {
     if (!papsSort.length) return studentPapsTableData;
@@ -297,7 +304,10 @@ export default function RecordBrowser({
 
     if (selectedItem === 'theory-exam') {
         let filteredStudents = allStudents;
-        if (itemGradeFilter !== 'all') {
+        if (selectedClubId !== 'all') {
+            const club = sportsClubs.find(c => c.id === selectedClubId);
+            if (club) filteredStudents = filteredStudents.filter(s => club.memberIds.includes(s.id));
+        } else if (itemGradeFilter !== 'all') {
             filteredStudents = filteredStudents.filter(s => s.grade === itemGradeFilter);
             if (itemClassNumFilter !== 'all') {
                 filteredStudents = filteredStudents.filter(s => s.classNum === itemClassNumFilter);
@@ -340,7 +350,10 @@ export default function RecordBrowser({
     if (!itemInfo) return [];
 
     let filteredStudents = allStudents;
-    if (itemGradeFilter !== 'all') {
+    if (selectedClubId !== 'all') {
+      const club = sportsClubs.find(c => c.id === selectedClubId);
+      if (club) filteredStudents = filteredStudents.filter(s => club.memberIds.includes(s.id));
+    } else if (itemGradeFilter !== 'all') {
       filteredStudents = filteredStudents.filter(s => s.grade === itemGradeFilter);
       if (itemClassNumFilter !== 'all') {
         filteredStudents = filteredStudents.filter(s => s.classNum === itemClassNumFilter);
@@ -563,11 +576,22 @@ export default function RecordBrowser({
                 </TabsList>
                 <TabsContent value="paps" className="space-y-4">
                      <div className="flex flex-wrap items-center gap-2 pt-4">
+                        <Select value={selectedClubId} onValueChange={(v) => { setSelectedClubId(v); if(v !== 'all') { setGradeFilter('all'); setClassNumFilter('all'); } }}>
+                          <SelectTrigger className="w-full sm:w-[150px] font-bold">
+                            <SelectValue placeholder="클럽 필터" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">전체 클럽</SelectItem>
+                            {sportsClubs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+
                         <Select
                             value={gradeFilter}
                             onValueChange={(value) => {
-                            setGradeFilter(value);
-                            setClassNumFilter('all');
+                                setGradeFilter(value);
+                                setClassNumFilter('all');
+                                if(value !== 'all') setSelectedClubId('all');
                             }}
                         >
                             <SelectTrigger className="w-full sm:w-[120px]">
@@ -695,7 +719,17 @@ export default function RecordBrowser({
                             ))}
                           </SelectContent>
                        </Select>
-                        <Select value={itemGradeFilter} onValueChange={(value) => {setItemGradeFilter(value); setItemClassNumFilter('all');}}>
+                        <Select value={selectedClubId} onValueChange={(v) => { setSelectedClubId(v); if(v !== 'all') { setItemGradeFilter('all'); setItemClassNumFilter('all'); } }}>
+                          <SelectTrigger className="w-full sm:w-[150px] font-bold">
+                            <SelectValue placeholder="클럽 필터" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">전체 클럽</SelectItem>
+                            {sportsClubs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+
+                        <Select value={itemGradeFilter} onValueChange={(value) => {setItemGradeFilter(value); setItemClassNumFilter('all'); if(value !== 'all') setSelectedClubId('all');}}>
                             <SelectTrigger className="w-full sm:w-[120px]">
                                 <SelectValue placeholder="학년 선택" />
                             </SelectTrigger>

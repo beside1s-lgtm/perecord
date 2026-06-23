@@ -134,9 +134,9 @@ export const deleteStudentAndAssociatedRecords = async (school: string, studentI
   batch.delete(doc(db, 'schools', school, 'students', studentId));
   await batch.commit();
 
-  for (const item of affectedItems) {
-    await updateItemStatistics(school, item);
-  }
+  // for (const item of affectedItems) {
+  //   await updateItemStatistics(school, item);
+  // }
 };
 
 export const getStudent = async (
@@ -302,25 +302,39 @@ export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pic
   await signIn();
   const recordsRef = collection(db, 'schools', record.school, 'records');
   const q = query(recordsRef, where('studentId', '==', record.studentId), where('item', '==', record.item), where('date', '==', record.date), limit(1));
-  const querySnapshot = await getDocs(q);
-
-  let finalRecord: MeasurementRecord;
-  if (!querySnapshot.empty) {
-    const docRef = querySnapshot.docs[0].ref;
-    const updates: any = { value: record.value };
-    if (record.height !== undefined) updates.height = record.height;
-    if (record.weight !== undefined) updates.weight = record.weight;
-    await updateDoc(docRef, updates);
-    finalRecord = { ...querySnapshot.docs[0].data(), id: docRef.id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord;
-  } else {
-    const newRef = record.id ? doc(recordsRef, record.id) : doc(recordsRef);
-    finalRecord = { ...record, id: newRef.id } as MeasurementRecord;
-    await setDoc(newRef, finalRecord);
-  }
   
-  // 통계 비동기 업데이트 (응답 대기 안함)
-  updateItemStatistics(record.school, record.item);
-  return finalRecord;
+  try {
+    const querySnapshot = await getDocs(q);
+
+    let finalRecord: MeasurementRecord;
+    if (!querySnapshot.empty) {
+      const docRef = querySnapshot.docs[0].ref;
+      const updates: any = { value: record.value };
+      if (record.height !== undefined) updates.height = record.height;
+      if (record.weight !== undefined) updates.weight = record.weight;
+      await updateDoc(docRef, updates);
+      finalRecord = { ...querySnapshot.docs[0].data(), id: docRef.id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord;
+    } else {
+      const newRef = record.id ? doc(recordsRef, record.id) : doc(recordsRef);
+      // Firestore는 undefined 값을 허용하지 않으므로 undefined 필드를 제거합니다
+      const rawRecord = { ...record, id: newRef.id };
+      const finalObj: Record<string, any> = {};
+      Object.entries(rawRecord).forEach(([k, v]) => { if (v !== undefined) finalObj[k] = v; });
+      finalRecord = finalObj as MeasurementRecord;
+      await setDoc(newRef, finalObj);
+    }
+    
+    return finalRecord;
+  } catch (e: any) {
+    console.error('[addOrUpdateRecord] Firestore 저장 실패:', {
+      code: e?.code,
+      message: e?.message,
+      school: record.school,
+      item: record.item,
+      date: record.date,
+    });
+    throw e;
+  }
 };
 
 export const deleteRecord = async (school: string, recordId: string) => {
@@ -328,7 +342,7 @@ export const deleteRecord = async (school: string, recordId: string) => {
   const snap = await getDoc(doc(db, 'schools', school, 'records', recordId));
   const itemName = snap.exists() ? snap.data().item : null;
   await deleteDoc(doc(db, 'schools', school, 'records', recordId));
-  if (itemName) updateItemStatistics(school, itemName);
+  // if (itemName) updateItemStatistics(school, itemName);
 };
 
 export const deleteRecordsByDateAndItem = async (school: string, date: string, item: string): Promise<number> => {
@@ -338,7 +352,7 @@ export const deleteRecordsByDateAndItem = async (school: string, date: string, i
     const batch = writeBatch(db);
     snapshot.docs.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
-    updateItemStatistics(school, item);
+    // updateItemStatistics(school, item);
     return snapshot.size;
 };
 
@@ -361,12 +375,16 @@ export const addOrUpdateRecords = async (school: string, students: Student[], re
             updatedRecords.push({ ...querySnapshot.docs[0].data(), id: querySnapshot.docs[0].id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord);
         } else {
             const docRef = doc(collection(db, 'schools', school, 'records'));
-            batch.set(docRef, { ...record, id: docRef.id });
-            updatedRecords.push({ ...record, id: docRef.id } as MeasurementRecord);
+            // Firestore는 undefined 값을 허용하지 않으므로 undefined 필드를 제거합니다
+            const rawDoc = { ...record, id: docRef.id };
+            const cleanDoc: Record<string, any> = {};
+            Object.entries(rawDoc).forEach(([k, v]) => { if (v !== undefined) cleanDoc[k] = v; });
+            batch.set(docRef, cleanDoc);
+            updatedRecords.push(cleanDoc as MeasurementRecord);
         }
     }
     await batch.commit();
-    for (const item of affectedItems) updateItemStatistics(school, item);
+    // for (const item of affectedItems) updateItemStatistics(school, item);
   }
   return updatedRecords;
 };
@@ -378,17 +396,19 @@ export const getRecordsByStudent = async (school: string, studentId: string): Pr
 };
 
 // --- Statistics & Ranks (Pre-calculated Cache) ---
-export const updateItemStatistics = async (school: string, itemName: string): Promise<void> => {
+export const updateItemStatistics = async (school: string, itemName: string, students: Student[], items: MeasurementItem[], records?: MeasurementRecord[]): Promise<void> => {
     await signIn();
-    const [students, items, snapshot] = await Promise.all([
-        getStudents(school),
-        getItems(school),
-        getDocs(query(collection(db, 'schools', school, 'records'), where('item', '==', itemName)))
-    ]);
+    
+    let allRecords: MeasurementRecord[];
+    if (records) {
+        allRecords = records.filter(r => r.item === itemName);
+    } else {
+        const snapshot = await getDocs(query(collection(db, 'schools', school, 'records'), where('item', '==', itemName)));
+        allRecords = snapshot.docs.map(d => d.data() as MeasurementRecord);
+    }
     const itemInfo = items.find(i => i.name === itemName);
     if (!itemInfo) return;
 
-    const allRecords = snapshot.docs.map(d => d.data() as MeasurementRecord);
     const grades = [...new Set(students.map(s => s.grade))];
     const gradeStats: ItemStatistics['gradeStats'] = {};
     const studentMap = new Map(students.map(s => [s.id, s]));
@@ -419,12 +439,33 @@ export const updateItemStatistics = async (school: string, itemName: string): Pr
         }
 
         const totalValue = studentValues.reduce((acc, r) => acc + r.value, 0);
+        
+        // 등급 분포 계산 (PAPS 종목인 경우)
+        const gradeDistribution: Record<string, number> = { '1등급': 0, '2등급': 0, '3등급': 0, '4등급': 0, '5등급': 0 };
+        if (itemInfo.isPaps) {
+            studentValues.forEach(r => {
+                const s = studentMap.get(r.studentId);
+                const g = s ? getPapsGrade(itemInfo.name, s, r.value) : null;
+                if (g) gradeDistribution[`${g}등급`]++;
+            });
+            // 퍼센테이지로 변환
+            Object.keys(gradeDistribution).forEach(key => {
+                gradeDistribution[key] = parseFloat(((gradeDistribution[key] / studentValues.length) * 100).toFixed(2));
+            });
+        }
+
         const topRanks = allRanks.slice(0, 5).map(r => {
             const s = studentMap.get(r.studentId);
             return { ...r, name: s?.name || '?', classNum: s?.classNum || '?' };
         });
 
-        gradeStats[grade] = { average: parseFloat((totalValue / studentValues.length).toFixed(2)), count: studentValues.length, topRanks, allRanks };
+        gradeStats[grade] = { 
+            average: parseFloat((totalValue / studentValues.length).toFixed(2)), 
+            count: studentValues.length, 
+            topRanks, 
+            allRanks,
+            gradeDistribution: itemInfo.isPaps ? gradeDistribution : undefined
+        };
     }
 
     await setDoc(doc(db, 'schools', school, 'statistics', itemName), { id: itemName, gradeStats, lastUpdated: serverTimestamp() });
@@ -432,11 +473,16 @@ export const updateItemStatistics = async (school: string, itemName: string): Pr
 
 export const rebuildAllStatistics = async (school: string): Promise<void> => {
     await signIn();
-    const items = await getItems(school);
+    // 학생, 기록, 종목 데이터를 한 번만 로드하여 각 종목 통계 계산에 재사용 (성능 최적화)
+    const [items, students, allRecords] = await Promise.all([
+        getItems(school),
+        getStudents(school),
+        getRecords(school),
+    ]);
     const activeItems = items.filter(i => !i.isDeactivated && !i.isArchived);
     
     for (const item of activeItems) {
-        await updateItemStatistics(school, item.name);
+        await updateItemStatistics(school, item.name, students, items, allRecords);
     }
 };
 
@@ -523,7 +569,7 @@ export const cleanUpDuplicateRecords = async (school: string): Promise<number> =
 
   if (duplicates > 0) {
     await batch.commit();
-    for (const item of affected) updateItemStatistics(school, item);
+    // for (const item of affected) updateItemStatistics(school, item);
   }
   return duplicates;
 };

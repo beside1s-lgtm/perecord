@@ -454,7 +454,7 @@ export default function ReportCardPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="text-center p-6 border-4 border-dashed rounded-2xl h-full flex flex-col justify-center items-center print-hidden bg-muted/10 h-[240px]">
+                                        <div className="text-center p-6 border-4 border-dashed rounded-2xl flex flex-col justify-center items-center print-hidden bg-muted/10 h-[240px]">
                                             <Wand2 className="h-12 w-12 text-chart-2 mb-2 opacity-20" />
                                             <p className="text-[11px] text-muted-foreground mb-4 font-bold">측정 데이터를 기반으로<br/>AI 스카우팅 리포트를 생성할 수 있습니다.</p>
                                             <Button size="sm" onClick={handleGetScoutingReport} className="bg-chart-2 hover:bg-chart-2/90 font-black shadow-xl">

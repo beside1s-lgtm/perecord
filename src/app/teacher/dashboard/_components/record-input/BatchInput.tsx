@@ -116,7 +116,8 @@ export function BatchInput({ allStudents, activeItems, allRecords, onRecordUpdat
       setSavedIds(prev => new Set(prev).add(studentId));
       toast({ title: "저장 완료" });
     } catch (e) {
-      toast({ variant: "destructive", title: "저장 실패" });
+      console.error('[BatchInput] 저장 실패 상세 에러:', e);
+      toast({ variant: "destructive", title: "저장 실패", description: (e as any)?.message || '알 수 없는 오류' });
     } finally {
       setSavingId(null);
     }

@@ -1,10 +1,7 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: any = {
-  cacheComponents: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },

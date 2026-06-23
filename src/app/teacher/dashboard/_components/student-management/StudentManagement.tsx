@@ -5,7 +5,7 @@ import {
   deleteStudentAndAssociatedRecords,
   addStudent,
   updateStudent,
-  exportToCsv,
+  exportToExcel,
 } from "@/lib/store";
 import type {
   Student,
@@ -48,7 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { parseCsv } from "@/lib/utils";
+import { parseExcel } from "@/lib/utils";
 import {
   UserPlus,
   Trash2,
@@ -195,39 +195,34 @@ export function StudentManagement({
       '접속코드': s.accessCode,
     }));
     
-    exportToCsv(`${school}_${label}_명단.csv`, dataToExport);
+    exportToExcel(`${school}_${label}_명단.xlsx`, dataToExport);
     toast({
       title: "다운로드 시작",
       description: `${label.replace(/_/g, ' ')} 명단을 다운로드합니다.`,
     });
   };
 
-  const handleStudentCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStudentExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && school) {
       setIsUploading(true);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const text = e.target?.result as string;
-        try {
-          const newStudents = parseCsv<Omit<Student, "id" | "accessCode" | "photoUrl">>(text);
-          let count = 0;
-          await Promise.all(newStudents.map((s) => {
-            const studentSchool = s.school || school;
-            const exists = students.some(st => st.grade === s.grade && st.classNum === s.classNum && st.studentNum === s.studentNum && st.name === s.name);
-            if (!exists) {
-              count++;
-              return addStudent(studentSchool, { ...s, school: studentSchool }, students);
-            }
-            return Promise.resolve();
-          }));
-          onStudentsUpdate();
-          toast({ title: "일괄 등록 완료", description: `${count}명의 학생을 등록했습니다.` });
-        } catch (err) {
-          toast({ variant: "destructive", title: "파일 오류" });
-        } finally { setIsUploading(false); }
-      };
-      reader.readAsText(file, "UTF-8");
+      try {
+        const newStudents = await parseExcel<Omit<Student, "id" | "accessCode" | "photoUrl">>(file);
+        let count = 0;
+        await Promise.all(newStudents.map((s: any) => {
+          const studentSchool = s.school || school;
+          const exists = students.some(st => st.grade === s.grade && st.classNum === s.classNum && st.studentNum === s.studentNum && st.name === s.name);
+          if (!exists) {
+            count++;
+            return addStudent(studentSchool, { ...s, school: studentSchool }, students);
+          }
+          return Promise.resolve();
+        }));
+        onStudentsUpdate();
+        toast({ title: "일괄 등록 완료", description: `${count}명의 학생을 등록했습니다.` });
+      } catch (err) {
+        toast({ variant: "destructive", title: "파일 오류", description: "엑셀 파일의 형식이 올바르지 않습니다." });
+      } finally { setIsUploading(false); }
     }
     event.target.value = ""; 
   };
@@ -256,10 +251,10 @@ export function StudentManagement({
                 />
               </>
             )}
-            <Button variant="outline" size="sm" className="h-9" onClick={() => document.getElementById("student-csv-upload")?.click()} disabled={isUploading}>
+            <Button variant="outline" size="sm" className="h-9" onClick={() => document.getElementById("student-excel-upload")?.click()} disabled={isUploading}>
               {isUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 등록 중...</> : <><FileUp className="mr-2 h-4 w-4" /> 일괄 등록</>}
             </Button>
-            <input type="file" id="student-csv-upload" accept=".csv" onChange={handleStudentCsvUpload} style={{ display: "none" }} />
+            <input type="file" id="student-excel-upload" accept=".xlsx" onChange={handleStudentExcelUpload} style={{ display: "none" }} />
             <BatchPhotoUploadDialog students={sortedStudents} onComplete={onStudentsUpdate} school={school || ''} />
           </div>
 

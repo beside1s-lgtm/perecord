@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   description: '체육 수업 결과 기록 및 분석 시스템',
   manifest: '/manifest.json',
   icons: {
-    icon: '/200x200.png',
-    apple: '/200x200.png',
+    icon: '/icon.png',
+    apple: '/apple-icon.png',
   },
 };
 

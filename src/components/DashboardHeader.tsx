@@ -2,12 +2,20 @@
 
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, UserCircle } from "lucide-react";
+import { LogOut, UserCircle, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import Image from 'next/image';
+import { rebuildAllStatistics } from "@/lib/store";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function DashboardHeaderContents() {
   const { school } = useAuth();
@@ -18,10 +26,16 @@ export function DashboardHeaderContents() {
   );
 }
 
-export function DashboardHeader() {
-  const { user, logout } = useAuth();
+interface DashboardHeaderProps {
+  onStatsRebuilt?: () => void;
+}
+
+export function DashboardHeader({ onStatsRebuilt }: DashboardHeaderProps) {
+  const { user, school, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -29,6 +43,23 @@ export function DashboardHeader() {
 
   const handleThemeChange = (checked: boolean) => {
     setTheme(checked ? "dark" : "light");
+  };
+
+  const handleRebuildStats = async () => {
+    if (!school || isRebuilding) return;
+    setIsRebuilding(true);
+    try {
+      await rebuildAllStatistics(school);
+      toast({
+        title: "✅ 통계 재계산 완료",
+        description: "학생 페이지에 최신 측정 기록이 반영되었습니다.",
+      });
+      onStatsRebuilt?.();
+    } catch (e) {
+      toast({ variant: "destructive", title: "재계산 실패", description: "잠시 후 다시 시도해주세요." });
+    } finally {
+      setIsRebuilding(false);
+    }
   };
 
   return (
@@ -39,7 +70,31 @@ export function DashboardHeader() {
           체육 성장 기록 시스템
         </h1>
       </div>
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* 통계 재계산 버튼 */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRebuildStats}
+                disabled={isRebuilding}
+                className="flex items-center gap-1.5 border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/60 transition-all"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRebuilding ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline text-xs font-semibold">
+                  {isRebuilding ? "재계산 중..." : "통계 재계산"}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[200px] text-center">
+              <p className="text-xs">측정 기록 입력 후 학생 페이지에 반영하려면 클릭하세요</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* 다크모드 토글 */}
         {isMounted && (
           <div className="flex items-center space-x-2">
             <Label htmlFor="theme-switch" className="hidden sm:inline">

@@ -76,7 +76,10 @@ export function IndividualInput({ allStudents, activeItems, onRecordUpdate }: { 
       setVal('');
       setHeight('');
       setWeight('');
-    } catch (e) { toast({ variant: "destructive", title: "저장 실패" }); }
+    } catch (e) { 
+      console.error('[IndividualInput] 저장 실패 상세 에러:', e);
+      toast({ variant: "destructive", title: "저장 실패", description: (e as any)?.message || '알 수 없는 오류' }); 
+    }
     finally { setIsSubmitting(false); }
   };
 

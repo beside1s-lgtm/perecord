@@ -141,6 +141,7 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
   const selectedItemForBatch = useMemo(() => activeItems.find(item => item.name === batchRecordItem), [batchRecordItem, activeItems]);
   const selectedItemForSingle = useMemo(() => activeItems.find(item => item.name === selectedItemName), [selectedItemName, activeItems]);
 
+  // 그룹이나 종목 변경 시 기록 입력 초기화
   useEffect(() => {
     const isCompound = selectedItemForBatch?.isCompound;
     const newBatchRecords: Record<string, { value?: string, height?: string, weight?: string }> = {};
@@ -159,7 +160,7 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
     
     setBatchRecords(newBatchRecords);
     setSavedIds(new Set());
-  }, [selectedGrade, selectedClassNum, batchRecordItem, selectedGroupId, studentsForBatch, selectedItemForBatch]);
+  }, [selectedGrade, selectedClassNum, batchRecordItem, selectedGroupId]); // studentsForBatch 제거하여 단순 데이터 갱신 시 초기화 방지
 
   // 개별 기록 탭에서 학생 선택 시 BMI 초기 데이터 로딩
   useEffect(() => {

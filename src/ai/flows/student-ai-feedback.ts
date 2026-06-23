@@ -8,9 +8,9 @@
  * - StudentFeedbackOutput - The return type for the getFEedback function.
  */
 
-import {ai} from '@/ai/genkit';
-import {googleAI} from '@genkit-ai/google-genai';
-import {z} from 'zod';
+import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/google-genai';
+import { z } from 'zod';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -40,9 +40,9 @@ export async function getStudentFeedback(input: StudentFeedbackInput): Promise<S
 
 const prompt = ai.definePrompt({
   name: 'studentFeedbackPrompt',
-  input: {schema: StudentFeedbackInputSchema},
-  output: {schema: StudentFeedbackOutputSchema},
-  model: googleAI.model('gemini-3.0-flash'),
+  input: { schema: StudentFeedbackInputSchema },
+  output: { schema: StudentFeedbackOutputSchema },
+  model: googleAI.model('gemini-3.1-flash-lite-preview'),
   prompt: `당신은 학생의 운동 성과에 대해 한국어로 동기 부여가 되는 피드백을 제공하는 AI 코치입니다.
 
 학생 정보:
@@ -77,7 +77,7 @@ const studentFeedbackFlow = ai.defineFlow(
   },
   async input => {
     await delay(1000);
-    const {output} = await prompt(input);
+    const { output } = await prompt(input);
     return output!;
   }
 );

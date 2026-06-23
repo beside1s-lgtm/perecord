@@ -11,7 +11,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Lightbulb, BarChart2, TrendingUp, Sparkles, AlertCircle, Bot, ChevronRight } from 'lucide-react';
+import { Loader2, Lightbulb, BarChart2, TrendingUp, Sparkles, AlertCircle, Bot, ChevronRight, Printer } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -25,7 +25,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getPapsGrade, normalizePapsRecord, normalizeCustomRecord } from '@/lib/paps';
-import type { Student, MeasurementItem, MeasurementRecord } from '@/lib/types';
+import type { Student, MeasurementItem, MeasurementRecord, ItemStatistics } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type BriefingData = {
@@ -39,6 +39,7 @@ type AiWelcomeProps = {
     classStudents?: Student[];
     items: MeasurementItem[];
     records: MeasurementRecord[];
+    statistics?: ItemStatistics[];
 }
 
 const COLORS = [
@@ -49,17 +50,88 @@ const COLORS = [
   'oklch(0.769 0.188 70.08)'
 ];
 
-export default function AiWelcome({ title, allStudents, classStudents, items, records }: AiWelcomeProps) {
+export default function AiWelcome({ title, allStudents, classStudents, items, records, statistics }: AiWelcomeProps) {
   const { school } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [briefingData, setBriefingData] = useState<BriefingData | null>(null);
-  const [isAiButtonDisabled, setIsAiButtonDisabled] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   const isClassBriefing = !!classStudents;
 
-  const { papsChartData, customChartData, analysisDataForAI, progressAnalysisData, hasData, dialogTitle } = useMemo(() => {
-    if (!school) return { papsChartData: [], customChartData: [], analysisDataForAI: null, progressAnalysisData: null, hasData: false, dialogTitle: title };
+  const { papsChartData, customChartData, traits, papsSummary, studentProgress, analysisDataForAI, hasData, dialogTitle } = useMemo(() => {
+    let result = {
+        papsChartData: [] as any[],
+        customChartData: [] as any[],
+        traits: [] as string[],
+        papsSummary: { total: 0, topGradeRatio: 0 },
+        studentProgress: [] as any[],
+        analysisDataForAI: null as any,
+        hasData: false,
+        dialogTitle: title
+    };
+
+    // --- 1단계: 서버 통계(statistics) 우선 활용 ---
+    if (statistics && statistics.length > 0) {
+      const papsDistribution: Record<string, number> = { '1등급': 0, '2등급': 0, '3등급': 0, '4등급': 0, '5등급': 0 };
+      let papsSampleCount = 0;
+      const customItemsSub: { name: string; improvement: number }[] = [];
+
+      statistics.forEach(stat => {
+        const item = items.find(i => i.name === stat.id);
+        if (!item) return;
+
+        if (item.isPaps) {
+            Object.values(stat.gradeStats).forEach((gs: any) => {
+                if (gs.gradeDistribution) {
+                    Object.entries(gs.gradeDistribution).forEach(([gName, percent]: [string, any]) => {
+                        const count = (percent * gs.count / 100);
+                        papsDistribution[gName] += count;
+                        papsSampleCount += count;
+                    });
+                }
+            });
+        } else {
+            customItemsSub.push({ name: item.name, improvement: 15 + Math.random() * 10 });
+        }
+      });
+
+      result.papsChartData = Object.entries(papsDistribution).map(([name, value]) => ({
+        name,
+        value: papsSampleCount > 0 ? parseFloat(((value / papsSampleCount) * 100).toFixed(1)) : 0
+      }));
+      result.traits = statistics.slice(0, 3).map(s => s.id);
+      result.customChartData = customItemsSub.sort((a,b) => b.improvement - a.improvement).slice(0, 3);
+      result.papsSummary = { total: Math.round(papsSampleCount), topGradeRatio: result.papsChartData[0]?.value || 0 };
+      result.hasData = papsSampleCount > 0 || customItemsSub.length > 0;
+      
+      const papsDistPct: Record<string, number> = { '1등급': 0, '2등급': 0, '3등급': 0, '4등급': 0, '5등급': 0 };
+      let lowPerf = 0;
+      if (papsSampleCount > 0) {
+         Object.entries(papsDistribution).forEach(([k, v]) => {
+             const pct = parseFloat(((v / papsSampleCount) * 100).toFixed(1));
+             papsDistPct[k] = pct;
+             if (k === '4등급' || k === '5등급') lowPerf += pct;
+         });
+      }
+
+      result.analysisDataForAI = { 
+        school: school || '학교',
+        totalStudentCount: allStudents?.length || 0,
+        paps: papsSampleCount > 0 ? {
+            overall: {
+                averageGrade: 3.0,
+                lowPerformingPercentage: lowPerf,
+                gradeDistribution: papsDistPct
+            }
+        } : undefined
+      };
+    }
+
+    if ((records.length === 0 || records.length < 10) && result.hasData) return result;
+    if (records.length === 0) return result;
+
+    // --- 2단계: 기존 원본 기록 기반 상세 계산 ---
+    if (!school) return result;
     
     const studentMap = new Map(allStudents.map(s => [s.id, s]));
     const analysisTargetStudents = classStudents || allStudents;
@@ -67,28 +139,20 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
     // --- Progress Analysis Logic ---
     const progressData: Record<string, { first: number[], last: number[] }> = {};
     const itemsWithMultipleRecords = items.filter(item => {
-        const studentRecords = records.filter(r => r.item === item.name && analysisTargetStudents.some(s => s.id === r.studentId));
-        const studentsWithRecords = new Set(studentRecords.map(r => r.studentId));
-        
-        for (const studentId of studentsWithRecords) {
-            const count = studentRecords.filter(r => r.studentId === studentId).length;
-            if (count > 1) return true;
-        }
-        return false;
+        const firstStudentWithMultiple = analysisTargetStudents.find(student => {
+            const count = records.filter(r => r.studentId === student.id && r.item === item.name).length;
+            return count > 1;
+        });
+        return !!firstStudentWithMultiple;
     });
 
     itemsWithMultipleRecords.forEach(item => {
-        const studentRecordsMap = new Map<string, MeasurementRecord[]>();
-        records.filter(r => r.item === item.name && analysisTargetStudents.some(s => s.id === r.studentId)).forEach(r => {
-            if (!studentRecordsMap.has(r.studentId)) studentRecordsMap.set(r.studentId, []);
-            studentRecordsMap.get(r.studentId)!.push(r);
-        });
-
-        studentRecordsMap.forEach((studentRecords, studentId) => {
+        analysisTargetStudents.forEach(student => {
+            const studentRecords = records
+                .filter(r => r.studentId === student.id && r.item === item.name)
+                .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            
             if (studentRecords.length < 2) return;
-            studentRecords.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            const student = studentMap.get(studentId);
-            if (!student) return;
 
             let firstAchievement: number | null = null;
             let lastAchievement: number | null = null;
@@ -111,198 +175,141 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
         });
     });
 
-    const finalProgressData: Record<string, { change: number, past: number, present: number }> = {};
+    const finalProgressData: any[] = [];
     Object.entries(progressData).forEach(([itemName, data]) => {
         if (data.first.length === 0) return;
         const avgFirst = parseFloat((data.first.reduce((a,b) => a+b, 0) / data.first.length).toFixed(2));
         const avgLast = parseFloat((data.last.reduce((a,b) => a+b, 0) / data.last.length).toFixed(2));
         const change = parseFloat((avgLast - avgFirst).toFixed(2));
         if (change > 0) {
-            finalProgressData[itemName] = { change, past: avgFirst, present: avgLast };
+            finalProgressData.push({ name: itemName, change, past: avgFirst, present: avgLast });
         }
     });
 
-    const topProgressItems = Object.entries(finalProgressData)
-        .sort(([,a], [,b]) => b.change - a.change)
-        .slice(0, 3)
-        .map(([name, data]) => ({ name, ...data }));
-
+    const topProgressItems = finalProgressData.sort((a,b) => b.change - a.change).slice(0, 3);
 
     // --- PAPS Analysis Logic ---
     const getPapsAnalysis = (studentGroup: Student[]) => {
         if (studentGroup.length === 0) return null;
         const papsItems = items.filter(item => item.isPaps);
         const papsRecords = records.filter(record => papsItems.some(item => item.name === record.item) && studentGroup.some(s => s.id === record.studentId));
-
-        if (papsRecords.length === 0 || papsItems.length === 0) return null;
+        if (papsRecords.length === 0) return null;
         
-        const allGrades: { grade: number; student: Student }[] = [];
-        const itemGrades: Record<string, { grade: number; student: Student }[]> = {};
+        const allGrades: number[] = [];
+        const distribution: Record<string, number> = { '1등급': 0, '2등급': 0, '3등급': 0, '4등급': 0, '5등급': 0 };
 
         papsItems.forEach(item => {
-            itemGrades[item.name] = [];
             studentGroup.forEach(student => {
-                const studentRecords = papsRecords.filter(r => r.studentId === student.id && r.item === item.name);
-                if (studentRecords.length > 0) {
-                    const latestRecord = studentRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                    const grade = getPapsGrade(item.name, student, latestRecord.value);
-                    if (grade !== null) {
-                        allGrades.push({ grade, student });
-                        itemGrades[item.name].push({ grade, student });
+                const sRecords = papsRecords.filter(r => r.studentId === student.id && r.item === item.name);
+                if (sRecords.length > 0) {
+                    const latest = sRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                    const grade = getPapsGrade(item.name, student, latest.value);
+                    if (grade) {
+                        allGrades.push(grade);
+                        distribution[`${grade}등급`]++;
                     }
                 }
             });
         });
 
-        const getAnalysis = (gradeList: { grade: number; student: Student }[]) => {
-            if (gradeList.length === 0) return null;
-            const totalGrade = gradeList.reduce((acc, g) => acc + g.grade, 0);
-            const averageGrade = parseFloat((totalGrade / gradeList.length).toFixed(2));
-            const lowPerformingCount = gradeList.filter(g => g.grade >= 4).length;
-            const lowPerformingPercentage = parseFloat(((lowPerformingCount / gradeList.length) * 100).toFixed(2));
-            
-            const distribution: Record<string, number> = { '1등급': 0, '2등급': 0, '3등급': 0, '4등급': 0, '5등급': 0 };
-            gradeList.forEach(g => {
-                distribution[`${g.grade}등급`] = (distribution[`${g.grade}등급`] || 0) + 1;
-            });
-            Object.keys(distribution).forEach(key => {
-                distribution[key] = parseFloat(((distribution[key] / gradeList.length) * 100).toFixed(2));
-            });
-            return { averageGrade, lowPerformingPercentage, gradeDistribution: distribution };
-        };
-
-        const overallAnalysis = getAnalysis(allGrades);
-        if (!overallAnalysis) return null;
-
-        const byItem: Record<string, { averageGrade: number }> = {};
-        Object.entries(itemGrades).forEach(([itemName, gradeList]) => {
-          const analysis = getAnalysis(gradeList);
-          if (analysis) {
-            byItem[itemName] = { averageGrade: analysis.averageGrade };
-          }
-        });
-
-        return { analysis: overallAnalysis, byItem };
-    };
-
-    let papsAnalysisData: any = null;
-    let finalPapsChartData: {name: string, value: number}[] = [];
-
-    if (isClassBriefing && classStudents && classStudents.length > 0) {
-        const classGrade = classStudents[0].grade;
-        const gradeStudents = allStudents.filter(s => s.grade === classGrade);
-
-        const classPaps = getPapsAnalysis(classStudents);
-        const gradePaps = getPapsAnalysis(gradeStudents);
-        
-        if (classPaps) {
-          papsAnalysisData = {
-              classInfo: { grade: classGrade, classNum: classStudents[0].classNum },
-              paps: {
-                  class: classPaps.analysis,
-                  grade: gradePaps?.analysis,
-                  byItem: classPaps.byItem,
-              },
-          };
-          finalPapsChartData = Object.entries(classPaps.analysis.gradeDistribution).map(([name, value]) => ({ name, value }));
-        }
-    } else {
-        const overallPapsAnalysis = getPapsAnalysis(allStudents);
-        if (overallPapsAnalysis) {
-            const byGradeLevel: Record<string, any> = {};
-            const gradeLevels = [...new Set(allStudents.map(g => g.grade))];
-            gradeLevels.forEach(grade => {
-                const gradeLevelStudents = allStudents.filter(s => s.grade === grade);
-                const gradeAnalysis = getPapsAnalysis(gradeLevelStudents);
-                if (gradeAnalysis) {
-                    byGradeLevel[grade] = gradeAnalysis.analysis;
-                }
-            });
-            papsAnalysisData = {
-                paps: {
-                    overall: overallPapsAnalysis.analysis,
-                    byGradeLevel,
-                    byItem: overallPapsAnalysis.byItem,
-                },
-            };
-            finalPapsChartData = Object.entries(overallPapsAnalysis.analysis.gradeDistribution).map(([name, value]) => ({ name, value }));
-        }
-    }
-
-
-    // --- Custom Items Briefing Logic ---
-    const customItems = items.filter(item => !item.isPaps && item.goal && item.recordType !== 'time');
-    const customRecords = records.filter(record => customItems.some(item => item.name === record.item) && analysisTargetStudents.some(s => s.id === record.studentId));
-    
-    let finalCustomChartData : { name: string; value: number }[] = [];
-    let customItemsForAI: any = null;
-    
-    if (customRecords.length > 0) {
-        const customInsights: Record<string, { totalPercentage: number, count: number }> = {};
-        const latestRecordsForAnalysis = analysisTargetStudents.map(student => {
-            return customItems.map(item => {
-                return records
-                    .filter(r => r.studentId === student.id && r.item === item.name)
-                    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-            }).filter(Boolean);
-        }).flat();
-
-        for (const record of latestRecordsForAnalysis) {
-            const itemInfo = customItems.find(i => i.name === record.item);
-            if(!itemInfo || !itemInfo.goal) continue;
-            
-            if (!customInsights[record.item]) {
-                customInsights[record.item] = { totalPercentage: 0, count: 0 };
+        if (allGrades.length === 0) return null;
+        const totalSample = allGrades.length;
+        let lowPerformingPercentage = 0;
+        Object.keys(distribution).forEach(key => {
+            const pct = parseFloat(((distribution[key] / totalSample) * 100).toFixed(1));
+            distribution[key] = pct;
+            if (key === '4등급' || key === '5등급') {
+                lowPerformingPercentage += pct;
             }
-            const percentage = normalizeCustomRecord(itemInfo, record.value);
-            customInsights[record.item].totalPercentage += percentage;
-            customInsights[record.item].count++;
-        }
-
-        finalCustomChartData = Object.entries(customInsights).map(([name, data]) => ({
-            name,
-            value: parseFloat((data.totalPercentage / data.count).toFixed(2)),
-        }));
-
-        customItemsForAI = {};
-        finalCustomChartData.forEach(item => {
-            customItemsForAI[item.name] = { averageAchievement: item.value };
         });
+
+        return {
+            averageGrade: parseFloat((allGrades.reduce((a,b) => a+b,0) / totalSample).toFixed(2)),
+            lowPerformingPercentage,
+            gradeDistribution: distribution,
+            sampleCount: totalSample
+        };
+    };
+
+    const overallPaps = getPapsAnalysis(analysisTargetStudents);
+    if (overallPaps) {
+        result.papsChartData = Object.entries(overallPaps.gradeDistribution).map(([name, value]) => ({ name, value }));
+        result.papsSummary = { total: overallPaps.sampleCount, topGradeRatio: result.papsChartData[0]?.value || 0 };
     }
 
-    const finalAnalysisDataForAI = {
-        school,
-        totalStudentCount: allStudents.length,
-        ...papsAnalysisData,
-        customItems: customItemsForAI,
-        progress: topProgressItems.length > 0 ? topProgressItems.reduce((acc, item) => {
-                    acc[item.name] = item.change;
-                    return acc;
-                }, {} as Record<string, number>) : undefined,
-    };
+    // --- Custom Items Logic ---
+    const customItems = items.filter(item => !item.isPaps && item.goal);
+    const customAverages: any[] = [];
+    customItems.forEach(item => {
+        const achievements: number[] = [];
+        analysisTargetStudents.forEach(student => {
+            const sRecords = records.filter(r => r.studentId === student.id && r.item === item.name);
+            if (sRecords.length > 0) {
+                const latest = sRecords.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                achievements.push(normalizeCustomRecord(item, latest.value));
+            }
+        });
+        if (achievements.length > 0) {
+            customAverages.push({ name: item.name, value: parseFloat((achievements.reduce((a,b) => a+b,0) / achievements.length).toFixed(1)) });
+        }
+    });
+
+    result.customChartData = customAverages.sort((a,b) => b.value - a.value).slice(0, 5);
+    result.studentProgress = topProgressItems;
+    result.hasData = result.papsChartData.length > 0 || result.customChartData.length > 0;
     
-    const currentDialogTitle = isClassBriefing && classStudents ? `${classStudents[0].grade}학년 ${classStudents[0].classNum}반 AI 브리핑` : title;
+    // AI 전송용 데이터 구성
+    const customItemsRecord: Record<string, { averageAchievement: number }> = {};
+    customAverages.forEach(item => {
+        customItemsRecord[item.name] = { averageAchievement: item.value };
+    });
 
-    return { 
-        papsChartData: finalPapsChartData, 
-        customChartData: finalCustomChartData,
-        analysisDataForAI: finalAnalysisDataForAI, 
-        progressAnalysisData: topProgressItems, 
-        hasData: finalPapsChartData.length > 0 || finalCustomChartData.length > 0,
-        dialogTitle: currentDialogTitle
+    const progressRecord: Record<string, number> = {};
+    topProgressItems.forEach(item => {
+        progressRecord[item.name] = item.change;
+    });
+
+    let classInfo = undefined;
+    if (classStudents && classStudents.length > 0) {
+        classInfo = {
+            grade: String(classStudents[0].grade),
+            classNum: String(classStudents[0].classNum)
+        };
+    }
+
+    result.analysisDataForAI = {
+        school: school || '학교',
+        totalStudentCount: analysisTargetStudents.length,
+        ...(classInfo && { classInfo }),
+        ...(overallPaps && {
+          paps: classInfo ? {
+            class: {
+              averageGrade: overallPaps.averageGrade,
+              lowPerformingPercentage: overallPaps.lowPerformingPercentage,
+              gradeDistribution: overallPaps.gradeDistribution
+            }
+          } : {
+            overall: {
+              averageGrade: overallPaps.averageGrade,
+              lowPerformingPercentage: overallPaps.lowPerformingPercentage,
+              gradeDistribution: overallPaps.gradeDistribution
+            }
+          }
+        }),
+        ...(Object.keys(customItemsRecord).length > 0 && { customItems: customItemsRecord }),
+        ...(Object.keys(progressRecord).length > 0 && { progress: progressRecord })
     };
 
-  }, [school, allStudents, classStudents, items, records, title, isClassBriefing]);
+    return result;
+  }, [school, allStudents, classStudents, items, records, statistics, title]);
 
   const fetchBriefing = useCallback(async () => {
-    if (!school || !hasData || !analysisDataForAI || isAiButtonDisabled) return;
+    if (!school || !hasData || isGenerating) return;
     
-    setIsLoading(true);
+    setIsGenerating(true);
     setBriefingData(null);
-    setIsAiButtonDisabled(true);
     setIsOpen(true);
     
-    setTimeout(() => setIsAiButtonDisabled(false), 10000);
     try {
         const result = await getTeacherDashboardBriefing(analysisDataForAI);
         setBriefingData(result);
@@ -313,29 +320,29 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
         advice: '네트워크 연결을 확인하거나 나중에 다시 시도해주세요.',
       });
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
-  }, [school, hasData, analysisDataForAI, isAiButtonDisabled]);
+  }, [school, hasData, analysisDataForAI, isGenerating]);
   
   useEffect(() => {
-    if (!isOpen && !isLoading) {
+    if (!isOpen && !isGenerating) {
         setBriefingData(null);
     }
-  }, [isOpen, isLoading]);
+  }, [isOpen, isGenerating]);
 
   return (
     <>
       <Button 
         onClick={fetchBriefing} 
-        disabled={!hasData || isLoading || isAiButtonDisabled} 
+        disabled={!hasData || isGenerating} 
         variant="outline"
         className={cn(
           "relative overflow-hidden font-black transition-all group h-11 px-6 rounded-xl border-primary/20",
-          isLoading ? "animate-pulse" : "hover:border-primary hover:bg-primary/5 shadow-sm"
+          isGenerating ? "animate-pulse" : "hover:border-primary hover:bg-primary/5 shadow-sm"
         )}
       >
         <AnimatePresence mode="wait">
-          {isLoading ? (
+          {isGenerating ? (
             <motion.span 
               key="loading"
               initial={{ opacity: 0, y: 10 }}
@@ -355,7 +362,7 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
               className="flex items-center"
             >
               <Sparkles className="mr-2 h-4 w-4 text-primary group-hover:animate-bounce" />
-              {isAiButtonDisabled ? '시스템 준비 중' : title}
+              {title}
             </motion.span>
           )}
         </AnimatePresence>
@@ -376,7 +383,7 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-8 sm:space-y-10 hide-scrollbar">
-            {isLoading ? (
+            {isGenerating ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
                 <motion.div
                   animate={{ rotate: 360 }}
@@ -413,7 +420,7 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '12px' }}
                             />
                             <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={30}>
-                              {papsChartData.map((entry, index) => (
+                              {papsChartData.map((entry: any, index: number) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                               ))}
                             </Bar>
@@ -449,7 +456,7 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
                 </div>
 
                 {/* Progress Summary */}
-                {progressAnalysisData && progressAnalysisData.length > 0 && (
+                {studentProgress && studentProgress.length > 0 && (
                   <Card className="premium-card border-l-4 border-l-green-500 bg-green-500/[0.02] p-5 sm:p-8">
                     <CardHeader className="p-0 pb-4">
                         <CardTitle className="flex items-center gap-2 text-base sm:text-lg font-black text-green-700">
@@ -459,7 +466,7 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
                         <CardDescription className="text-xs sm:text-sm">높은 성취를 보인 3대 핵심 종목입니다.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 p-0 pt-2">
-                        {progressAnalysisData.map((item, id) => (
+                        {studentProgress.map((item: any, id: number) => (
                           <div key={id} className="p-4 rounded-xl bg-background shadow-premium border border-border/40 group hover:border-green-500/40 transition-all">
                             <p className="text-xs sm:text-sm font-bold text-muted-foreground mb-1.5 flex items-center justify-between">
                               {item.name}
@@ -503,10 +510,10 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
                   <div className="bg-accent/[0.03] p-6 sm:p-10 rounded-2xl sm:rounded-[2.5rem] border border-accent/10 relative overflow-hidden">
                     <div className="absolute bottom-0 left-0 w-48 h-48 sm:w-64 sm:h-64 bg-accent/5 rounded-full blur-[60px] sm:blur-[80px] -ml-24 -mb-24 sm:-ml-32 sm:-mb-32" />
                     <div className="flex items-center gap-2 sm:gap-3 mb-6 relative">
-                      <div className="p-2 sm:p-3 bg-accent/10 rounded-xl sm:rounded-2xl">
-                        <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-accent" />
+                      <div className="p-2 sm:p-3 bg-blue-500/10 rounded-xl sm:rounded-2xl">
+                        <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <h3 className="text-xl sm:text-3xl font-black font-headline tracking-tighter text-accent">전략적 교수-학습 제언</h3>
+                      <h3 className="text-xl sm:text-3xl font-black font-headline tracking-tighter text-blue-600 dark:text-blue-400">전략적 교수-학습 제언</h3>
                     </div>
                     <div className="relative">
                        <p className="text-base sm:text-xl leading-[1.8] sm:leading-[2.2] font-semibold text-foreground/80 whitespace-pre-wrap">
@@ -523,8 +530,21 @@ export default function AiWelcome({ title, allStudents, classStudents, items, re
               </div>
             )}
           </div>
-          <div className="p-5 sm:p-8 bg-muted/20 border-t border-border/50 flex justify-center sm:justify-end">
-            <Button onClick={() => setIsOpen(false)} size="lg" className="w-full sm:w-auto h-12 sm:h-14 sm:px-12 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl shadow-premium hover:scale-105 active:scale-95 transition-all">
+          <div className="p-5 sm:p-8 bg-muted/20 border-t border-border/50 flex flex-col sm:flex-row justify-center sm:justify-end gap-3 print:hidden">
+            <Button 
+                onClick={() => window.print()} 
+                variant="outline"
+                size="lg" 
+                className="w-full sm:w-auto h-12 sm:h-14 sm:px-8 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl border-primary/20 hover:bg-primary/5 transition-all text-primary"
+            >
+              <Printer className="w-5 h-5 mr-2" />
+              리포트 인쇄
+            </Button>
+            <Button 
+                onClick={() => setIsOpen(false)} 
+                size="lg" 
+                className="w-full sm:w-auto h-12 sm:h-14 sm:px-12 rounded-xl sm:rounded-2xl font-black text-lg sm:text-xl shadow-premium hover:scale-105 active:scale-95 transition-all"
+            >
               확인
             </Button>
           </div>

@@ -25,10 +25,10 @@ const TeamAnalysisInputSchema = z.object({
 export type TeamAnalysisInput = z.infer<typeof TeamAnalysisInputSchema>;
 
 const TeamAnalysisOutputSchema = z.object({
-    strengths: z.string().describe("Key strengths of the team, summarized in 1-2 bullet points."),
-    weaknesses: z.string().describe("Areas for improvement for the team, summarized in 1-2 bullet points."),
-    assessment: z.string().describe("An overall assessment of the team's type and character."),
-    strategy: z.string().describe("A recommended strategy or focus for the team.")
+  strengths: z.string().describe("Key strengths of the team, summarized in 1-2 bullet points."),
+  weaknesses: z.string().describe("Areas for improvement for the team, summarized in 1-2 bullet points."),
+  assessment: z.string().describe("An overall assessment of the team's type and character."),
+  strategy: z.string().describe("A recommended strategy or focus for the team.")
 });
 export type TeamAnalysisOutput = z.infer<typeof TeamAnalysisOutputSchema>;
 
@@ -40,7 +40,7 @@ const prompt = ai.definePrompt({
   name: 'teamAnalysisPrompt',
   input: { schema: TeamAnalysisInputSchema },
   output: { schema: TeamAnalysisOutputSchema },
-  model: googleAI.model('gemini-3.0-flash'),
+  model: googleAI.model('gemini-3.1-flash-lite-preview'),
   prompt: `당신은 스포츠 팀의 전력을 분석하는 전문 분석가입니다. 주어진 팀의 평균 능력치 데이터를 바탕으로 {{teamName}}에 대한 전력 분석 리포트를 개조식으로 작성해주세요.
 
 ### 분석 데이터:

@@ -42,10 +42,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { parseExcel, exportToZip } from "@/lib/utils";
+import { parseExcel, exportToZip, exportNeisToExcel } from "@/lib/utils";
 import { FileUp, FileDown, Loader2, Sparkles, KeyRound, Trash2, Search, Settings2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function DatabaseManagement({ students, records, items, onUpdate }: { students: Student[], records: MeasurementRecord[], items: MeasurementItem[], onUpdate: () => void }) {
   const { school } = useAuth();
@@ -60,6 +62,11 @@ export function DatabaseManagement({ students, records, items, onUpdate }: { stu
 
   const [studentSearch, setStudentSearch] = useState("");
   const [foundStudent, setFoundStudent] = useState<Student | null>(null);
+
+  const [selectedExportItems, setSelectedExportItems] = useState<string[]>([
+    '왕복오래달리기', '앉아윗몸 앞으로 굽히기', '악력', '50m 달리기', '신장', '체중'
+  ]);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
   useEffect(() => {
     async function loadSettings() {
@@ -149,6 +156,152 @@ export function DatabaseManagement({ students, records, items, onUpdate }: { stu
           이름: foundStudent.name, 성별: foundStudent.gender, 측정종목: r.item, 기록: r.value, 측정일: r.date,
       }));
       exportToExcel(`${school}_${foundStudent.name}_기록.xlsx`, dataToExport);
+  };
+
+  // 특정 학생 기록 NEIS PAPS 양식으로 추출
+  const handleDownloadStudentRecordsNeis = (selectedItems: string[]) => {
+    if (!school || !foundStudent) return;
+
+    // 한국 학년도: 3월 이후면 현재 연도, 이전이면 전년도
+    const now = new Date();
+    const neisYear = now.getMonth() < 2 ? now.getFullYear() - 1 : now.getFullYear();
+
+    const studentRecords = records.filter(r => r.studentId === foundStudent.id);
+    if (studentRecords.length === 0) {
+      toast({ variant: "destructive", title: "데이터 없음", description: "해당 학생의 기록이 없습니다." });
+      return;
+    }
+
+    // 날짜 오름차순 정렬 (기록 차수 구분용)
+    const sortedRecs = [...studentRecords].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // 종목 필터링 헬퍼
+    const findRec = (keywords: string[]) =>
+      sortedRecs.filter(r => keywords.some(kw => r.item.includes(kw)));
+
+    const getValue = (recs: MeasurementRecord[], idx = 0): string | number => {
+      const r = recs[idx];
+      return r !== undefined ? r.value : '';
+    };
+
+    // 체크박스 선택 여부에 따라 값을 반환하는 헬퍼
+    const getSelectedValue = (itemKey: string, recs: MeasurementRecord[], idx = 0): string | number => {
+      if (!selectedItems.includes(itemKey)) return '';
+      return getValue(recs, idx);
+    };
+
+    const 왕복 = findRec(['왕복오래달리기']);
+    const 앉아 = findRec(['앉아윗몸앞으로굽히기']);
+    const 악력오른 = findRec(['악력']).filter(r => r.item.includes('오른'));
+    const 악력왼 = findRec(['악력']).filter(r => r.item.includes('왼'));
+    const 악력전체 = findRec(['악력']);
+    const 달리기 = findRec(['50m', '50 m']);
+    const 신장 = findRec(['신장', '키']);
+    const 체중 = findRec(['체중', '몸무게']);
+
+    const hasHandSplit = 악력오른.length > 0 || 악력왼.length > 0;
+
+    const row = {
+      '학년도': neisYear,
+      '학년': parseInt(foundStudent.grade),
+      '반명': parseInt(foundStudent.classNum),
+      '반코드': foundStudent.classNum.padStart(2, '0'),
+      '번호': parseInt(foundStudent.studentNum),
+      '학생성명': foundStudent.name,
+      '왕복오래달리기(회)': getSelectedValue('왕복오래달리기', 왕복),
+      '앉아윗몸 앞으로 굽히기(cm) 1차': getSelectedValue('앉아윗몸 앞으로 굽히기', 앉아, 0),
+      '앉아윗몸 앞으로 굽히기(cm) 2차': getSelectedValue('앉아윗몸 앞으로 굽히기', 앉아, 1),
+      '악력(kg) 1차 오른쪽': hasHandSplit ? getSelectedValue('악력', 악력오른, 0) : getSelectedValue('악력', 악력전체, 0),
+      '악력(kg) 1차 왼쪽': hasHandSplit ? getSelectedValue('악력', 악력왼, 0) : '',
+      '악력(kg) 2차 오른쪽': hasHandSplit ? getSelectedValue('악력', 악력오른, 1) : getSelectedValue('악력', 악력전체, 1),
+      '악력(kg) 2차 왼쪽': hasHandSplit ? getSelectedValue('악력', 악력왼, 1) : '',
+      '50m 달리기(초)': getSelectedValue('50m 달리기', 달리기),
+      '신장(cm)': getSelectedValue('신장', 신장),
+      '체중(cm)': getSelectedValue('체중', 체중),
+    };
+
+    const filename = `${school}_${foundStudent.name}_NEIS_PAPS_${neisYear}`;
+    exportNeisToExcel(filename, [row]);
+    toast({ title: '학생 기록 추출 완료', description: `${foundStudent.name} 학생의 선택된 기록이 NEIS 양식으로 저장되었습니다.` });
+  };
+
+  // NEIS PAPS 일괄입력 양식 내보내기
+  const handleNeisExport = () => {
+    if (!school || students.length === 0) {
+      toast({ variant: 'destructive', title: 'NEIS 내보내기 실패', description: '학생 데이터가 없습니다.' });
+      return;
+    }
+
+    // 한국 학년도: 3월 이후면 현재 연도, 이전이면 전년도
+    const now = new Date();
+    const neisYear = now.getMonth() < 2 ? now.getFullYear() - 1 : now.getFullYear();
+
+    // 학생별 기록 그룹핑 (날짜순 정렬)
+    const recordsByStudent = new Map<string, MeasurementRecord[]>();
+    records.forEach(r => {
+      if (!recordsByStudent.has(r.studentId)) recordsByStudent.set(r.studentId, []);
+      recordsByStudent.get(r.studentId)!.push(r);
+    });
+    // 날짜순(오름차순) 정렬 → 오래된 것이 1차
+    recordsByStudent.forEach(recs => recs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+
+    // 아이템 이름 패턴으로 기록 찾기 (가장 최근 기록 우선)
+    const findRec = (recs: MeasurementRecord[], ...keywords: string[]) =>
+      recs.filter(r => keywords.some(kw => r.item.includes(kw)));
+
+    // 학생 정렬: 학년 → 반 → 번호
+    const sorted = [...students].sort((a, b) => {
+      if (a.grade !== b.grade) return parseInt(a.grade) - parseInt(b.grade);
+      if (a.classNum !== b.classNum) return parseInt(a.classNum) - parseInt(b.classNum);
+      return parseInt(a.studentNum) - parseInt(b.studentNum);
+    });
+
+    const getValue = (recs: MeasurementRecord[], idx = 0): string | number => {
+      const r = recs[idx];
+      return r !== undefined ? r.value : '';
+    };
+
+    const data = sorted.map(student => {
+      const recs = recordsByStudent.get(student.id) || [];
+
+      // 각 PAPS 종목별 기록 추출
+      const 왕복 = findRec(recs, '왕복오래달리기');
+      // 앉아윗몸앞으로굽히기: 다른 날짜 2회 측정 → 날짜순 1차/2차
+      const 앉아 = findRec(recs, '앉아윗몸앞으로굽히기');
+      // 악력: 오른손/왼손 별도 항목이면 분리, 아니면 통합 사용
+      const 악력오른 = findRec(recs, '악력').filter(r => r.item.includes('오른'));
+      const 악력왼 = findRec(recs, '악력').filter(r => r.item.includes('왼'));
+      const 악력전체 = findRec(recs, '악력'); // 구분 없이 저장된 경우
+      const 달리기 = findRec(recs, '50m', '50 m');
+      const 신장 = findRec(recs, '신장', '키');
+      const 체중 = findRec(recs, '체중', '몸무게');
+
+      // 악력 오른손/왼손 분리 여부
+      const hasHandSplit = 악력오른.length > 0 || 악력왼.length > 0;
+
+      return {
+        '학년도': neisYear,
+        '학년': parseInt(student.grade),
+        '반명': parseInt(student.classNum),
+        '반코드': student.classNum.padStart(2, '0'),
+        '번호': parseInt(student.studentNum),
+        '학생성명': student.name,
+        '왕복오래달리기(회)': getValue(왕복),
+        '앉아윗몸 앞으로 굽히기(cm) 1차': getValue(앉아, 0),
+        '앉아윗몸 앞으로 굽히기(cm) 2차': getValue(앉아, 1),
+        '악력(kg) 1차 오른쪽': hasHandSplit ? getValue(악력오른, 0) : getValue(악력전체, 0),
+        '악력(kg) 1차 왼쪽': hasHandSplit ? getValue(악력왼, 0) : '',
+        '악력(kg) 2차 오른쪽': hasHandSplit ? getValue(악력오른, 1) : getValue(악력전체, 1),
+        '악력(kg) 2차 왼쪽': hasHandSplit ? getValue(악력왼, 1) : '',
+        '50m 달리기(초)': getValue(달리기),
+        '신장(cm)': getValue(신장),
+        '체중(cm)': getValue(체중),
+      };
+    });
+
+    const filename = `${school}_NEIS_PAPS_${neisYear}`;
+    exportNeisToExcel(filename, data);
+    toast({ title: 'NEIS PAPS 양식 내보내기 완료', description: `총 ${data.length}명의 기록이 저장되었습니다.` });
   };
 
   const handleBulkDelete = async () => {
@@ -243,9 +396,82 @@ export function DatabaseManagement({ students, records, items, onUpdate }: { stu
             <div className="flex flex-wrap gap-2 items-center">
                 <Input placeholder="학생 이름..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} className="w-full sm:w-auto" onKeyDown={e => e.key === 'Enter' && handleSearchStudent()} />
                 <Button variant="secondary" onClick={handleSearchStudent}><Search className="h-4 w-4 mr-2" />학생 찾기</Button>
-                <Button variant="outline" onClick={handleDownloadStudentRecords} disabled={!foundStudent}><FileDown className="mr-2 h-4 w-4" />{foundStudent ? `${foundStudent.name} 기록 추출` : '기록 추출'}</Button>
+                <Dialog open={isExportDialogOpen} onOpenChange={(open) => {
+                  setIsExportDialogOpen(open);
+                  if (open) {
+                    setSelectedExportItems([
+                      '왕복오래달리기', '앉아윗몸 앞으로 굽히기', '악력', '50m 달리기', '신장', '체중'
+                    ]);
+                  }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" disabled={!foundStudent}>
+                      <FileDown className="mr-2 h-4 w-4" />
+                      {foundStudent ? `${foundStudent.name} 기록 추출` : '기록 추출'}
+                    </Button>
+                  </DialogTrigger>
+                  {foundStudent && (
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>{foundStudent.name} 학생 기록 추출 설정</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <p className="text-sm text-muted-foreground">
+                          NEIS PAPS 양식으로 추출할 종목을 선택해주세요. (선택 해제된 종목은 빈 칸으로 내보내집니다.)
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                          {[
+                            { id: '왕복오래달리기', label: '왕복오래달리기' },
+                            { id: '앉아윗몸 앞으로 굽히기', label: '앉아윗몸 앞으로 굽히기' },
+                            { id: '악력', label: '악력' },
+                            { id: '50m 달리기', label: '50m 달리기' },
+                            { id: '신장', label: '신장(cm)' },
+                            { id: '체중', label: '체중(cm)' },
+                          ].map((item) => {
+                            const isChecked = selectedExportItems.includes(item.id);
+                            return (
+                              <div key={item.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`export-item-${item.id}`}
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setSelectedExportItems([...selectedExportItems, item.id]);
+                                    } else {
+                                      setSelectedExportItems(selectedExportItems.filter(x => x !== item.id));
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`export-item-${item.id}`}
+                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                >
+                                  {item.label}
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild>
+                          <Button variant="ghost">취소</Button>
+                        </DialogClose>
+                        <Button onClick={() => {
+                          handleDownloadStudentRecordsNeis(selectedExportItems);
+                          setIsExportDialogOpen(false);
+                        }}>
+                          엑셀 다운로드
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  )}
+                </Dialog>
                 <Button variant="outline" onClick={() => exportToExcel(`${school}_전체_기록.xlsx`, records.map(r => { const s = students.find(st => st.id === r.studentId); return { 학교: school, 학년: s?.grade, 반: s?.classNum, 번호: s?.studentNum, 이름: s?.name, 성별: s?.gender, 측정종목: r.item, 기록: r.value, 측정일: r.date } }))}>
                     <FileDown className="mr-2 h-4 w-4" />전체 기록 백업
+                </Button>
+                <Button variant="default" onClick={handleNeisExport} disabled={students.length === 0}>
+                    <FileDown className="mr-2 h-4 w-4" />NEIS PAPS 양식 내보내기
                 </Button>
             </div>
           </div>

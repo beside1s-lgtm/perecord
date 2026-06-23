@@ -5,8 +5,9 @@ import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
-import { getStudents, getItems, getRecords, getTeamGroups, getSportsClubs } from "@/lib/store";
-import type { Student, MeasurementItem, MeasurementRecord, TeamGroup, SportsClub } from "@/lib/types";
+import { getStudents, getItems, getRecords, getTeamGroups, getSportsClubs, getStatistics } from "@/lib/store";
+import { signIn } from "@/lib/firebase";
+import type { Student, MeasurementItem, MeasurementRecord, TeamGroup, SportsClub, ItemStatistics } from "@/lib/types";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StudentManagement } from "./_components/StudentManagement";
@@ -63,10 +64,75 @@ export default function TeacherDashboardPage() {
     records: MeasurementRecord[];
     teams: TeamGroup[];
     clubs: SportsClub[];
-  }>({ students: [], items: [], records: [], teams: [], clubs: [] });
+    statistics: ItemStatistics[];
+  }>({ students: [], items: [], records: [], teams: [], clubs: [], statistics: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("measurement");
   const router = useRouter();
+
+  // 캐시 키 설정
+  const getCacheKey = useCallback(() => `pe_dash_cache_${school}`, [school]);
+
+  const load = useCallback(async (force = false) => {
+    if (!school) return;
+    
+    // 1. 캐시 확인 (강제 로드가 아닐 때)
+    if (!force) {
+      const cachedData = sessionStorage.getItem(getCacheKey());
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          setData(parsed);
+          setIsLoading(false);
+          console.log("Using cached dashboard data for school:", school);
+          // 캐시 히트 후 백그라운드에서 records만 최신화
+          getRecords(school).then(records => {
+            setData(prev => ({ ...prev, records }));
+          }).catch(() => {});
+          return;
+        } catch (e) {
+          sessionStorage.removeItem(getCacheKey());
+        }
+      }
+    }
+
+    // 2. 서버에서 데이터 가져오기 (signIn을 한 번만 호출하여 중복 오버헤드 제거)
+    if (!force) setIsLoading(true);
+    try {
+      await signIn(); // 한 번만 인증하여 아래 Promise.all의 각 함수가 이미 인증된 상태로 실행됨
+      const [students, items, records, teams, clubs, statistics] = await Promise.all([
+        getStudents(school), 
+        getItems(school), 
+        getRecords(school), 
+        getTeamGroups(school), 
+        getSportsClubs(school),
+        getStatistics(school)
+      ]);
+      const newData = { students, items, records, teams, clubs, statistics };
+      setData(newData);
+      
+      // 3. 캐시 저장 (records는 제외하여 Quota 오류 방지, 대신 매번 백그라운드 최신화)
+      try {
+        const cacheData = { ...newData, records: [] };
+        sessionStorage.setItem(getCacheKey(), JSON.stringify(cacheData));
+        console.log("Dashboard data updated from Firestore.");
+      } catch (e) {
+        console.warn("Session storage quota exceeded, skipping cache.");
+        sessionStorage.removeItem(getCacheKey());
+      }
+    } catch (e) {
+      console.error("Teacher dashboard load failed", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [school, getCacheKey]);
+
+  // 최초 로드 시 1회만 실행 (캐시 우선 발동)
+  useEffect(() => { 
+    if (school) {
+        load(false); 
+    }
+  }, [school, load]);
 
   useEffect(() => {
      if (activeTab) {
@@ -75,27 +141,6 @@ export default function TeacherDashboardPage() {
        router.replace(url.pathname + url.search, { scroll: false });
      }
   }, [activeTab, router]);
-
-  const load = useCallback(async (silent = false) => {
-    if (!school) return;
-    if (!silent) setIsLoading(true);
-    try {
-      const [students, items, records, teams, clubs] = await Promise.all([
-        getStudents(school), 
-        getItems(school), 
-        getRecords(school), 
-        getTeamGroups(school), 
-        getSportsClubs(school)
-      ]);
-      setData({ students, items, records, teams, clubs });
-    } catch (e) {
-      console.error("Teacher dashboard load failed", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [school]);
-
-  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -134,10 +179,10 @@ export default function TeacherDashboardPage() {
                   <ClassAnalytics allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={() => load(true)} sportsClubs={data.clubs} />
                 </TabsContent>
                 <TabsContent value="browser">
-                  <RecordBrowser allStudents={data.students} allItems={data.items} allRecords={data.records} />
+                  <RecordBrowser allStudents={data.students} allItems={data.items} allRecords={data.records} sportsClubs={data.clubs} />
                 </TabsContent>
                 <TabsContent value="ranking">
-                  <Ranking allStudents={data.students} allItems={data.items} allRecords={data.records} />
+                  <Ranking allStudents={data.students} allItems={data.items} allRecords={data.records} sportsClubs={data.clubs} />
                 </TabsContent>
               </Suspense>
             </Tabs>
@@ -198,7 +243,7 @@ export default function TeacherDashboardPage() {
   return (
 
     <div className="container mx-auto p-2 sm:p-10 space-y-8 sm:space-y-12 pb-32">
-      <DashboardHeader />
+      <DashboardHeader onStatsRebuilt={() => load(true)} />
       
       <Card className="premium-card bg-primary/[0.04] border-primary/20 overflow-hidden relative group">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32 transition-transform group-hover:scale-125 duration-700" />
@@ -215,6 +260,7 @@ export default function TeacherDashboardPage() {
             allStudents={data.students} 
             items={data.items} 
             records={data.records} 
+            statistics={data.statistics}
           />
         </CardContent>
       </Card>

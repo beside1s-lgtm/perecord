@@ -29,11 +29,11 @@ const ScoutingReportInputSchema = z.object({
 export type ScoutingReportInput = z.infer<typeof ScoutingReportInputSchema>;
 
 const ScoutingReportOutputSchema = z.object({
-    strengths: z.string().describe("Key strengths of the student, summarized in 1-2 bullet points."),
-    weaknesses: z.string().describe("Areas for improvement for the student, summarized in 1-2 bullet points."),
-    assessment: z.string().describe("An overall assessment of the student's athletic type."),
-    position: z.string().describe("A recommended position based on the analysis."),
-    suggestedTrainingMethods: z.string().describe('Suggested training methods to improve performance.'),
+  strengths: z.string().describe("Key strengths of the student, summarized in 1-2 bullet points."),
+  weaknesses: z.string().describe("Areas for improvement for the student, summarized in 1-2 bullet points."),
+  assessment: z.string().describe("An overall assessment of the student's athletic type."),
+  position: z.string().describe("A recommended position based on the analysis."),
+  suggestedTrainingMethods: z.string().describe('Suggested training methods to improve performance.'),
 });
 export type ScoutingReportOutput = z.infer<typeof ScoutingReportOutputSchema>;
 
@@ -45,7 +45,7 @@ const prompt = ai.definePrompt({
   name: 'scoutingReportPrompt',
   input: { schema: ScoutingReportInputSchema },
   output: { schema: ScoutingReportOutputSchema },
-  model: googleAI.model('gemini-3.0-flash'),
+  model: googleAI.model('gemini-3.1-flash-lite-preview'),
   prompt: `당신은 학생 선수의 잠재력을 분석하는 전문 스카우터이자 코치입니다. 주어진 데이터를 바탕으로 {{studentName}} 학생에 대한 스카우팅 리포트를 개조식으로 작성해주세요.
 
 ### 분석 데이터:
@@ -83,13 +83,13 @@ const scoutingReportFlow = ai.defineFlow(
   },
   async (input) => {
     const enrichedScores = input.abilityScores.map(score => {
-        const itemInfo = input.allItems.find(i => i.name === score.item);
-        return {
-            ...score,
-            category: itemInfo?.category || (itemInfo?.isPaps ? 'PAPS' : '기타'),
-        };
+      const itemInfo = input.allItems.find(i => i.name === score.item);
+      return {
+        ...score,
+        category: itemInfo?.category || (itemInfo?.isPaps ? 'PAPS' : '기타'),
+      };
     });
-    
+
     const enrichedInput = { ...input, abilityScores: enrichedScores };
 
     await delay(1000);

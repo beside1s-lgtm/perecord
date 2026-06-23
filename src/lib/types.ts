@@ -57,6 +57,7 @@ export type ItemStatistics = {
       count: number;
       topRanks: { studentId: string; rank: number; value: number; name: string; classNum: string }[];
       allRanks: { studentId: string; rank: number; value: number }[];
+      gradeDistribution?: Record<string, number>;
     }
   };
   lastUpdated: any;

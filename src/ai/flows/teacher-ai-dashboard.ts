@@ -10,9 +10,9 @@
  * - TeacherDashboardBriefingOutput - The return type for the getTeacherDashboardBriefing function.
  */
 
-import {ai} from '@/ai/genkit';
-import {googleAI} from '@genkit-ai/google-genai';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/google-genai';
+import { z } from 'genkit';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -25,12 +25,12 @@ const PapsAnalysisSchema = z.object({
 });
 
 const CustomItemAnalysisSchema = z.record(z.string(), z.object({
-    averageAchievement: z.number().describe('The average achievement percentage for the custom item.')
+  averageAchievement: z.number().describe('The average achievement percentage for the custom item.')
 })).describe('Analysis of custom (non-PAPS) items with a defined goal.');
 
 const ProgressAnalysisSchema = z.record(
-    z.string(),
-    z.number().describe('The average percentage point change in achievement for the item.')
+  z.string(),
+  z.number().describe('The average percentage point change in achievement for the item.')
 ).describe('Analysis of improvement in subjects with two or more records.');
 
 const TeacherDashboardBriefingInputSchema = z.object({
@@ -38,11 +38,11 @@ const TeacherDashboardBriefingInputSchema = z.object({
   totalStudentCount: z.number().describe('The total number of students with records.'),
   classInfo: z.object({ grade: z.string(), classNum: z.string() }).optional().describe('The class being analyzed, if applicable.'),
   paps: z.object({
-      class: PapsAnalysisSchema.optional().describe('PAPS analysis for the specific class.'),
-      grade: PapsAnalysisSchema.optional().describe('PAPS analysis for the entire grade level.'),
-      overall: PapsAnalysisSchema.optional().describe('PAPS analysis for all students.'),
-      byGradeLevel: z.record(z.string(), PapsAnalysisSchema).optional(),
-      byItem: z.record(z.string(), z.object({ averageGrade: z.number() })).optional(),
+    class: PapsAnalysisSchema.optional().describe('PAPS analysis for the specific class.'),
+    grade: PapsAnalysisSchema.optional().describe('PAPS analysis for the entire grade level.'),
+    overall: PapsAnalysisSchema.optional().describe('PAPS analysis for all students.'),
+    byGradeLevel: z.record(z.string(), PapsAnalysisSchema).optional(),
+    byItem: z.record(z.string(), z.object({ averageGrade: z.number() })).optional(),
   }).optional().describe('A detailed analysis of PAPS performance.'),
   customItems: CustomItemAnalysisSchema.optional().describe('Analysis of custom measurement items.'),
   progress: ProgressAnalysisSchema.optional(),
@@ -72,9 +72,9 @@ export async function getTeacherDashboardBriefing(
 
 const prompt = ai.definePrompt({
   name: 'teacherDashboardBriefingPrompt',
-  input: {schema: TeacherDashboardBriefingInputSchema},
-  output: {schema: TeacherDashboardBriefingOutputSchema},
-  model: googleAI.model('gemini-3.0-flash'),
+  input: { schema: TeacherDashboardBriefingInputSchema },
+  output: { schema: TeacherDashboardBriefingOutputSchema },
+  model: googleAI.model('gemini-3.1-flash-lite-preview'),
   prompt: `당신은 {{school}}의 체육 선생님을 위한 AI 조수입니다. 학생들의 PAPS(학생건강체력평가) 및 기타 종목 데이터를 종합적으로 분석하여 브리핑과 수업 조언을 한국어로 제공해주세요.
 
 ## 분석 데이터:
@@ -157,7 +157,7 @@ const teacherDashboardBriefingFlow = ai.defineFlow(
   },
   async input => {
     await delay(1000);
-    const {output} = await prompt(input);
-return output!;
+    const { output } = await prompt(input);
+    return output!;
   }
 );

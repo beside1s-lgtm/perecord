@@ -43,7 +43,7 @@ const prompt = ai.definePrompt({
   name: 'quizGenerationPrompt',
   input: { schema: QuizInputSchema },
   output: { schema: QuizOutputSchema },
-  model: googleAI.model('gemini-3.0-flash'),
+  model: googleAI.model('gemini-3.1-flash-lite-preview'),
   prompt: `당신은 전문 체육 교사이며 교육 평가 전문가입니다. 주어진 '학습 자료 내용'을 바탕으로 학생들의 이해도를 측정할 수 있는 이론 평가 문제를 출제해주세요.
 
 ### 출제 지침:

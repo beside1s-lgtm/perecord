@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { calculateRanks } from "@/lib/store";
-import { Student, MeasurementItem, MeasurementRecord } from "@/lib/types";
+import { Student, MeasurementItem, MeasurementRecord, SportsClub } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -42,9 +42,10 @@ interface RankingProps {
   allStudents: Student[];
   allItems: MeasurementItem[];
   allRecords: MeasurementRecord[];
+  sportsClubs: SportsClub[];
 }
 
-function HallOfFame({ allItems, allRecords, allStudents }: RankingProps) {
+function HallOfFame({ allItems, allRecords, allStudents, sportsClubs }: RankingProps) {
   const { school } = useAuth();
   const [hofGrade, setHofGrade] = useState<string>("all");
   
@@ -59,7 +60,13 @@ function HallOfFame({ allItems, allRecords, allStudents }: RankingProps) {
     const measurementWeekItems = allItems.filter(item => item.isMeasurementWeek && !item.isArchived && !item.isDeactivated);
     if (measurementWeekItems.length === 0) return [];
     
-    const allRanks = calculateRanks(school, allItems, allRecords, allStudents, hofGrade === 'all' ? undefined : hofGrade);
+    // 클럽 또는 학년 필터 적용
+    let studentsToRank = allStudents;
+    if (hofGrade !== 'all') {
+      studentsToRank = allStudents.filter(s => s.grade === hofGrade);
+    }
+    
+    const allRanks = calculateRanks(school, allItems, allRecords, studentsToRank);
     const studentMap = new Map(allStudents.map(s => [s.id, s]));
 
     return measurementWeekItems.map(item => {
@@ -161,10 +168,12 @@ export default function Ranking({
   allStudents,
   allItems,
   allRecords,
+  sportsClubs,
 }: RankingProps) {
   const { school } = useAuth();
 
   const [selectedGrade, setSelectedGrade] = useState("");
+  const [selectedClubId, setSelectedClubId] = useState("all");
   const [selectedItem, setSelectedItem] = useState("");
   const [rankedStudents, setRankedStudents] = useState<RankedStudent[]>([]);
 
@@ -178,13 +187,20 @@ export default function Ranking({
 
 
   useEffect(() => {
-    if (school && selectedGrade && selectedItem) {
+    if (school && (selectedGrade || selectedClubId !== 'all') && selectedItem) {
+      let filteredStudents = allStudents;
+      if (selectedClubId !== 'all') {
+        const club = sportsClubs.find(c => c.id === selectedClubId);
+        if (club) filteredStudents = allStudents.filter(s => club.memberIds.includes(s.id));
+      } else {
+        filteredStudents = allStudents.filter(s => s.grade === selectedGrade);
+      }
+
       const ranksByItem = calculateRanks(
         school,
         allItems,
         allRecords,
-        allStudents,
-        selectedGrade
+        filteredStudents
       );
       const itemRanks = ranksByItem[selectedItem];
       const itemInfo = allItems.find((i) => i.name === selectedItem);
@@ -227,7 +243,7 @@ export default function Ranking({
 
   return (
     <div className="space-y-6">
-      <HallOfFame allItems={allItems} allRecords={allRecords} allStudents={allStudents} />
+      <HallOfFame allItems={allItems} allRecords={allRecords} allStudents={allStudents} sportsClubs={sportsClubs} />
       <Card className="bg-transparent shadow-none border-none">
         <CardHeader>
           <CardTitle>종목별 순위 조회</CardTitle>
@@ -236,7 +252,17 @@ export default function Ranking({
             학생과 부진 학생을 쉽게 파악할 수 있습니다.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-2 pt-4">
-            <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+            <Select value={selectedClubId} onValueChange={v => { setSelectedClubId(v); if(v !== 'all') setSelectedGrade(''); }}>
+              <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectValue placeholder="클럽 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 클럽</SelectItem>
+                {sportsClubs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedGrade} onValueChange={v => { setSelectedGrade(v); if(v !== '') setSelectedClubId('all'); }}>
               <SelectTrigger className="w-full sm:w-[120px]">
                 <SelectValue placeholder="학년 선택" />
               </SelectTrigger>
