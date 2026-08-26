@@ -7,7 +7,25 @@ export type Student = {
   name: string;
   gender: '남' | '여';
   accessCode: string; // 5-digit unique access code
+  personalCode?: string; // 교무 관리용 개인코드 (학교 자체 식별코드)
   photoUrl?: string; // 학생 사진 URL (선택 사항)
+
+  // 건강기록부 연동용 인적사항 및 이력
+  residentRegistrationNumber?: string;
+  guardianName?: string;
+  bloodType?: string;
+  officialSchoolName?: string;
+  teacherName?: string;
+  schoolHistory?: SchoolHistoryEntry[];
+  preSchoolImmunizations?: PreSchoolImmunization;
+  postSchoolImmunizations?: PostSchoolImmunization[];
+  healthExams?: {
+    [grade: string]: {
+      general?: HealthExam;
+      dental?: HealthExam;
+    }
+  };
+  otherExams?: OtherExam[];
 };
 
 export type StudentToAdd = Omit<Student, 'id' | 'accessCode' | 'photoUrl'>;
@@ -72,6 +90,15 @@ export type School = {
   createdAt: any; // Can be a Date or a server timestamp
   isStudentInputDisabled?: boolean; // 학생 입력 제한 설정
   measurementPeriods?: MeasurementPeriod[]; // 학교 공통 측정 주간 설정
+
+  // 지정 검진기관 리스트
+  healthExamInstitutions?: string[];
+  dentalExamInstitutions?: string[];
+
+  // 건강기록부 설정
+  officialSchoolName?: string;       // 정식 학교 명칭 (예: 호치민한국국제학교)
+  healthRecord_showGuardian?: boolean; // 건강기록부에 보호자 성명 표시 여부 (기본 true)
+  healthRecord_showBloodType?: boolean; // 건강기록부에 혈액형 표시 여부 (기본 true)
 };
 
 export type SportsClub = {
@@ -215,4 +242,35 @@ export type QuizResult = {
   total: number;
   passed: boolean;
   createdAt: any;
+};
+
+// --- 건강기록부 세부 타입 ---
+export type SchoolHistoryEntry = {
+  year?: string;       // 학년도 (예: "2024")
+  schoolName: string;
+  grade: string;
+  classNum: string;
+  studentNum: string;
+  teacherName: string;
+};
+
+export type PreSchoolImmunization = {
+  [disease: string]: boolean[]; // 1차~5차 여부 체크 (예: [true, true, false, false, false])
+};
+
+export type PostSchoolImmunization = {
+  diseaseName: string;
+  grade: string;
+  date: string;
+};
+
+export type HealthExam = {
+  date: string;
+  institution: string;
+};
+
+export type OtherExam = {
+  date: string;
+  examName: string;
+  institution: string;
 };

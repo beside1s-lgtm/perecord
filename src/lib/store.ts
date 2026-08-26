@@ -213,10 +213,28 @@ export const promoteStudents = async (school: string, allStudents: Student[], pr
     const studentKey = `${promo.school}-${promo.grade}-${promo.classNum}-${promo.studentNum}-${promo.name}`;
     const student = studentMapByName.get(studentKey);
     if (student && promo.newGrade && promo.newClassNum && promo.newStudentNum) {
+      // 1. 기존의 schoolHistory 이력이 없으면 초기화
+      const history = student.schoolHistory || [];
+      
+      // 2. 현재 진급 직전 학년의 이력을 기록 (중복 방지)
+      const hasCurrentHistory = history.some(h => h.grade === student.grade);
+      if (!hasCurrentHistory) {
+        history.push({
+          schoolName: student.officialSchoolName || student.school,
+          grade: student.grade,
+          classNum: student.classNum,
+          studentNum: student.studentNum,
+          teacherName: student.teacherName || '-',
+        });
+      }
+
       batch.update(doc(db, 'schools', school, 'students', student.id), {
         grade: promo.newGrade,
         classNum: promo.newClassNum,
         studentNum: promo.newStudentNum,
+        officialSchoolName: promo.newOfficialSchoolName || student.officialSchoolName || school,
+        teacherName: promo.newTeacherName || '-',
+        schoolHistory: history,
       });
       updatedCount++;
     }
@@ -359,32 +377,43 @@ export const deleteRecordsByDateAndItem = async (school: string, date: string, i
 export const addOrUpdateRecords = async (school: string, students: Student[], recordsToProcess: any[]): Promise<MeasurementRecord[]> => {
   await signIn();
   const updatedRecords: MeasurementRecord[] = [];
-  const affectedItems = new Set<string>();
 
   if (recordsToProcess.length > 0) {
     const batch = writeBatch(db);
-    for (const record of recordsToProcess) {
-        affectedItems.add(record.item);
-        const q = query(collection(db, 'schools', school, 'records'), where('studentId', '==', record.studentId), where('item', '==', record.item), where('date', '==', record.date), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const updates: any = { value: record.value };
-            if (record.height !== undefined) updates.height = record.height;
-            if (record.weight !== undefined) updates.weight = record.weight;
-            batch.update(querySnapshot.docs[0].ref, updates);
-            updatedRecords.push({ ...querySnapshot.docs[0].data(), id: querySnapshot.docs[0].id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord);
-        } else {
-            const docRef = doc(collection(db, 'schools', school, 'records'));
-            // Firestore는 undefined 값을 허용하지 않으므로 undefined 필드를 제거합니다
-            const rawDoc = { ...record, id: docRef.id };
-            const cleanDoc: Record<string, any> = {};
-            Object.entries(rawDoc).forEach(([k, v]) => { if (v !== undefined) cleanDoc[k] = v; });
-            batch.set(docRef, cleanDoc);
-            updatedRecords.push(cleanDoc as MeasurementRecord);
-        }
+    
+    // Firestore 쿼리를 병렬로 조회하여 네트워크 왕복 시간 최소화
+    const queries = recordsToProcess.map(record => {
+      const q = query(
+        collection(db, 'schools', school, 'records'), 
+        where('studentId', '==', record.studentId), 
+        where('item', '==', record.item), 
+        where('date', '==', record.date), 
+        limit(1)
+      );
+      return getDocs(q).then(snapshot => ({ record, snapshot }));
+    });
+
+    const results = await Promise.all(queries);
+
+    for (const { record, snapshot } of results) {
+      if (!snapshot.empty) {
+        const docRef = snapshot.docs[0].ref;
+        const updates: any = { value: record.value };
+        if (record.height !== undefined) updates.height = record.height;
+        if (record.weight !== undefined) updates.weight = record.weight;
+        batch.update(docRef, updates);
+        updatedRecords.push({ ...snapshot.docs[0].data(), id: snapshot.docs[0].id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord);
+      } else {
+        const docRef = doc(collection(db, 'schools', school, 'records'));
+        const rawDoc = { ...record, id: docRef.id };
+        const cleanDoc: Record<string, any> = {};
+        Object.entries(rawDoc).forEach(([k, v]) => { if (v !== undefined) cleanDoc[k] = v; });
+        batch.set(docRef, cleanDoc);
+        updatedRecords.push(cleanDoc as MeasurementRecord);
+      }
     }
+
     await batch.commit();
-    // for (const item of affectedItems) updateItemStatistics(school, item);
   }
   return updatedRecords;
 };
@@ -459,30 +488,44 @@ export const updateItemStatistics = async (school: string, itemName: string, stu
             return { ...r, name: s?.name || '?', classNum: s?.classNum || '?' };
         });
 
-        gradeStats[grade] = { 
+        const statsEntry: any = { 
             average: parseFloat((totalValue / studentValues.length).toFixed(2)), 
             count: studentValues.length, 
             topRanks, 
-            allRanks,
-            gradeDistribution: itemInfo.isPaps ? gradeDistribution : undefined
+            allRanks
         };
+        if (itemInfo.isPaps) {
+            statsEntry.gradeDistribution = gradeDistribution;
+        }
+        gradeStats[grade] = statsEntry;
     }
 
-    await setDoc(doc(db, 'schools', school, 'statistics', itemName), { id: itemName, gradeStats, lastUpdated: serverTimestamp() });
+    // Firestore는 undefined 값을 허용하지 않으므로 JSON 직렬화로 정리 후 저장
+    const cleanGradeStats = JSON.parse(JSON.stringify(gradeStats));
+    await setDoc(doc(db, 'schools', school, 'statistics', itemName), { id: itemName, gradeStats: cleanGradeStats, lastUpdated: serverTimestamp() });
 };
 
 export const rebuildAllStatistics = async (school: string): Promise<void> => {
     await signIn();
-    // 학생, 기록, 종목 데이터를 한 번만 로드하여 각 종목 통계 계산에 재사용 (성능 최적화)
-    const [items, students, allRecords] = await Promise.all([
-        getItems(school),
-        getStudents(school),
-        getRecords(school),
-    ]);
-    const activeItems = items.filter(i => !i.isDeactivated && !i.isArchived);
-    
-    for (const item of activeItems) {
-        await updateItemStatistics(school, item.name, students, items, allRecords);
+    try {
+        const [items, students, allRecords] = await Promise.all([
+            getItems(school),
+            getStudents(school),
+            getRecords(school),
+        ]);
+        const activeItems = items.filter(i => !i.isDeactivated && !i.isArchived);
+        
+        for (const item of activeItems) {
+            try {
+                await updateItemStatistics(school, item.name, students, items, allRecords);
+            } catch (err) {
+                console.error(`Error updating statistics for item "${item.name}":`, err);
+                throw err;
+            }
+        }
+    } catch (e) {
+        console.error("Error in rebuildAllStatistics:", e);
+        throw e;
     }
 };
 
@@ -760,4 +803,33 @@ export const getQuizResultsBySchool = async (school: string): Promise<QuizResult
   await signIn();
   const snapshot = await getDocs(collection(db, 'schools', school, 'quizResults'));
   return snapshot.docs.map(doc => doc.data() as QuizResult);
+};
+
+// --- 건강기록부 검진기관 설정 함수 ---
+export const saveSchoolExamInstitutions = async (
+  schoolName: string,
+  institutions: { general: string[]; dental: string[] }
+): Promise<void> => {
+  await signIn();
+  const schoolDocRef = doc(db, 'schools', schoolName);
+  await updateDoc(schoolDocRef, {
+    healthExamInstitutions: institutions.general,
+    dentalExamInstitutions: institutions.dental,
+  });
+};
+
+export const getSchoolExamInstitutions = async (
+  schoolName: string
+): Promise<{ general: string[]; dental: string[] }> => {
+  await signIn();
+  const schoolDocRef = doc(db, 'schools', schoolName);
+  const schoolDoc = await getDoc(schoolDocRef);
+  if (schoolDoc.exists()) {
+    const data = schoolDoc.data() as School;
+    return {
+      general: data.healthExamInstitutions || [],
+      dental: data.dentalExamInstitutions || [],
+    };
+  }
+  return { general: [], dental: [] };
 };

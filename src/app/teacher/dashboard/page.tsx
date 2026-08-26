@@ -12,6 +12,7 @@ import type { Student, MeasurementItem, MeasurementRecord, TeamGroup, SportsClub
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StudentManagement } from "./_components/StudentManagement";
 import { DatabaseManagement } from "./_components/DatabaseManagement";
+import { HealthRecordManagement } from "./_components/HealthRecordManagement";
 import MeasurementManagement from "./_components/MeasurementManagement";
 import ClassAnalytics from "./_components/ClassAnalytics";
 import RecordBrowser from "./_components/RecordBrowser";
@@ -84,10 +85,9 @@ export default function TeacherDashboardPage() {
           const parsed = JSON.parse(cachedData);
           setData(parsed);
           setIsLoading(false);
-          console.log("Using cached dashboard data for school:", school);
-          // 캐시 히트 후 백그라운드에서 records만 최신화
-          getRecords(school).then(records => {
-            setData(prev => ({ ...prev, records }));
+          // 캐시 히트 후 백그라운드에서 records와 students(전체) 최신화
+          Promise.all([getRecords(school), getStudents(school)]).then(([records, students]) => {
+            setData(prev => ({ ...prev, records, students }));
           }).catch(() => {});
           return;
         } catch (e) {
@@ -100,30 +100,61 @@ export default function TeacherDashboardPage() {
     if (!force) setIsLoading(true);
     try {
       await signIn(); // 한 번만 인증하여 아래 Promise.all의 각 함수가 이미 인증된 상태로 실행됨
-      const [students, items, records, teams, clubs, statistics] = await Promise.all([
+      // 필터 및 화면 레이아웃 구성용 필수 기초 데이터만 1차로 로딩
+      const [students, items, teams, clubs] = await Promise.all([
         getStudents(school), 
         getItems(school), 
-        getRecords(school), 
         getTeamGroups(school), 
-        getSportsClubs(school),
-        getStatistics(school)
+        getSportsClubs(school)
       ]);
-      const newData = { students, items, records, teams, clubs, statistics };
-      setData(newData);
       
-      // 3. 캐시 저장 (records는 제외하여 Quota 오류 방지, 대신 매번 백그라운드 최신화)
-      try {
-        const cacheData = { ...newData, records: [] };
-        sessionStorage.setItem(getCacheKey(), JSON.stringify(cacheData));
-        console.log("Dashboard data updated from Firestore.");
-      } catch (e) {
-        console.warn("Session storage quota exceeded, skipping cache.");
-        sessionStorage.removeItem(getCacheKey());
-      }
+      const initialData = { 
+        students, 
+        items, 
+        records: [], 
+        teams, 
+        clubs, 
+        statistics: [] 
+      };
+      
+      setData(initialData);
+      
+      // 기초 데이터 로드 완료 즉시 스켈레톤 해제하여 대시보드 표시
+      if (!force) setIsLoading(false);
+
+      // 무거운 기록 데이터와 통계 데이터는 백그라운드에서 병렬 로드
+      Promise.all([
+        getRecords(school),
+        getStatistics(school)
+      ]).then(([records, statistics]) => {
+        setData(prev => {
+          const updated = { ...prev, records, statistics };
+          
+          // 백그라운드 로드가 완료된 후 캐시 갱신 (records 및 건강기록부 무거운 필드 제외)
+          try {
+            const lightStudents = updated.students.map(s => ({
+              id: s.id, name: s.name, grade: s.grade, classNum: s.classNum,
+              number: s.number, gender: s.gender, personalCode: s.personalCode,
+              school: s.school, guardianName: s.guardianName,
+              residentRegistrationNumber: s.residentRegistrationNumber,
+              bloodType: s.bloodType, formalSchoolName: s.formalSchoolName,
+              schoolHistory: s.schoolHistory,
+            }));
+            const cacheData = { ...updated, records: [], students: lightStudents };
+            sessionStorage.setItem(getCacheKey(), JSON.stringify(cacheData));
+          } catch (e) {
+            sessionStorage.removeItem(getCacheKey());
+          }
+
+          return updated;
+        });
+      }).catch(e => {
+        console.error("Background data load failed", e);
+      });
+
     } catch (e) {
       console.error("Teacher dashboard load failed", e);
-    } finally {
-      setIsLoading(false);
+      if (!force) setIsLoading(false);
     }
   }, [school, getCacheKey]);
 
@@ -150,6 +181,64 @@ export default function TeacherDashboardPage() {
     }
   }, []);
 
+  // 로컬 상태 즉시 갱신 핸들러 (불필요한 전체 네트워크 리로드 방지)
+  const handleRecordUpdate = useCallback((recordsOrId: MeasurementRecord[] | string, action: 'update' | 'delete' = 'update') => {
+    setData(prev => {
+      let updatedRecords = [...prev.records];
+      if (action === 'delete') {
+        const idToDelete = typeof recordsOrId === 'string' ? recordsOrId : '';
+        updatedRecords = updatedRecords.filter(r => r.id !== idToDelete);
+      } else if (Array.isArray(recordsOrId)) {
+        const newRecordsMap = new Map(recordsOrId.map(r => [r.id, r]));
+        const existingIds = new Set<string>();
+        updatedRecords = updatedRecords.map(r => {
+          if (newRecordsMap.has(r.id)) {
+            existingIds.add(r.id);
+            return newRecordsMap.get(r.id)!;
+          }
+          return r;
+        });
+        recordsOrId.forEach(r => {
+          if (!existingIds.has(r.id)) {
+            updatedRecords.push(r);
+          }
+        });
+      }
+      return { ...prev, records: updatedRecords };
+    });
+  }, []);
+
+  const handleTeamGroupUpdate = useCallback((updatedGroup: TeamGroup) => {
+    setData(prev => {
+      const exists = prev.teams.some(t => t.id === updatedGroup.id);
+      const newTeams = exists
+        ? prev.teams.map(t => t.id === updatedGroup.id ? updatedGroup : t)
+        : [...prev.teams, updatedGroup];
+      return { ...prev, teams: newTeams };
+    });
+  }, []);
+
+  const handleTeamGroupDelete = useCallback((groupId: string) => {
+    setData(prev => ({
+      ...prev,
+      teams: prev.teams.filter(t => t.id !== groupId)
+    }));
+  }, []);
+
+  const handleClubUpdate = useCallback(() => {
+    if (!school) return;
+    getSportsClubs(school).then(clubs => {
+      setData(prev => ({ ...prev, clubs }));
+    });
+  }, [school]);
+
+  const handleTournamentUpdate = useCallback(() => {
+    if (!school) return;
+    getTeamGroups(school).then(teams => {
+      setData(prev => ({ ...prev, teams }));
+    });
+  }, [school]);
+
   const renderTabContent = useMemo(() => {
     if (isLoading || isAuthLoading) return <DashboardSkeleton />;
 
@@ -173,10 +262,10 @@ export default function TeacherDashboardPage() {
               </TabsList>
               <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>}>
                 <TabsContent value="input">
-                  <RecordInput allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={() => load(true)} allTeamGroups={data.teams} sportsClubs={data.clubs} />
+                  <RecordInput allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={handleRecordUpdate} allTeamGroups={data.teams} sportsClubs={data.clubs} />
                 </TabsContent>
                 <TabsContent value="analysis">
-                  <ClassAnalytics allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={() => load(true)} sportsClubs={data.clubs} />
+                  <ClassAnalytics allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={handleRecordUpdate} sportsClubs={data.clubs} />
                 </TabsContent>
                 <TabsContent value="browser">
                   <RecordBrowser allStudents={data.students} allItems={data.items} allRecords={data.records} sportsClubs={data.clubs} />
@@ -201,13 +290,13 @@ export default function TeacherDashboardPage() {
               </TabsList>
               <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
                 <TabsContent value="tournament">
-                  <TournamentManagement onTournamentUpdate={() => load(true)} allTeamGroups={data.teams} allStudents={data.students} />
+                  <TournamentManagement onTournamentUpdate={handleTournamentUpdate} allTeamGroups={data.teams} allStudents={data.students} />
                 </TabsContent>
                 <TabsContent value="balancer">
-                  <TeamBalancer allStudents={data.students} allItems={data.items} allRecords={data.records} teamGroups={data.teams} onTeamGroupUpdate={() => load(true)} onTeamGroupDelete={() => load(true)} sportsClubs={data.clubs} />
+                  <TeamBalancer allStudents={data.students} allItems={data.items} allRecords={data.records} teamGroups={data.teams} onTeamGroupUpdate={handleTeamGroupUpdate} onTeamGroupDelete={handleTeamGroupDelete} sportsClubs={data.clubs} />
                 </TabsContent>
                 <TabsContent value="clubs">
-                  <SportsClubManagement allStudents={data.students} sportsClubs={data.clubs} onClubUpdate={() => load(true)} />
+                  <SportsClubManagement allStudents={data.students} sportsClubs={data.clubs} onClubUpdate={handleClubUpdate} />
                 </TabsContent>
               </Suspense>
             </Tabs>
@@ -215,10 +304,11 @@ export default function TeacherDashboardPage() {
 
           <TabsContent value="data" className="space-y-6 mt-0">
             <Tabs defaultValue="students">
-              <TabsList className="grid w-full grid-cols-3 mb-6 bg-muted/30 p-1 rounded-xl h-auto sm:h-12 border border-border/50">
+              <TabsList className="grid w-full grid-cols-4 mb-6 bg-muted/30 p-1 rounded-xl h-auto sm:h-12 border border-border/50">
                 <TabsTrigger value="students" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">명부</TabsTrigger>
                 <TabsTrigger value="items" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">종목</TabsTrigger>
                 <TabsTrigger value="db" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">DB</TabsTrigger>
+                <TabsTrigger value="health-record" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">건강기록부</TabsTrigger>
               </TabsList>
               <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
                 <TabsContent value="students">
@@ -229,6 +319,9 @@ export default function TeacherDashboardPage() {
                 </TabsContent>
                 <TabsContent value="db">
                   <DatabaseManagement students={data.students} records={data.records} items={data.items} onUpdate={() => load(true)} />
+                </TabsContent>
+                <TabsContent value="health-record">
+                  <HealthRecordManagement students={data.students} items={data.items} records={data.records} onUpdate={() => load(true)} />
                 </TabsContent>
               </Suspense>
             </Tabs>
@@ -243,9 +336,11 @@ export default function TeacherDashboardPage() {
   return (
 
     <div className="container mx-auto p-2 sm:p-10 space-y-8 sm:space-y-12 pb-32">
-      <DashboardHeader onStatsRebuilt={() => load(true)} />
+      <div className="no-print">
+        <DashboardHeader onStatsRebuilt={() => load(true)} />
+      </div>
       
-      <Card className="premium-card bg-primary/[0.04] border-primary/20 overflow-hidden relative group">
+      <Card className="premium-card bg-primary/[0.04] border-primary/20 overflow-hidden relative group no-print">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32 transition-transform group-hover:scale-125 duration-700" />
         <CardHeader className="pb-4 relative z-10">
           <CardTitle className="flex items-center gap-3 text-primary font-headline text-2xl sm:text-3xl">
@@ -266,7 +361,7 @@ export default function TeacherDashboardPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex items-center justify-start overflow-x-auto hide-scrollbar w-full mb-10 h-16 sm:h-20 p-2 bg-muted/20 border border-border/40 rounded-[1.5rem] sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-2 sm:gap-3">
+        <TabsList className="flex items-center justify-start overflow-x-auto hide-scrollbar w-full mb-10 h-16 sm:h-20 p-2 bg-muted/20 border border-border/40 rounded-[1.5rem] sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-2 sm:gap-3 no-print">
           <TabsTrigger value="measurement" className="flex-1 min-w-[130px] h-full rounded-[1rem] sm:rounded-[2rem] text-sm sm:text-lg font-black tracking-tight flex items-center justify-center gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all">
             <LineChart className="w-5 h-5 sm:w-6 sm:h-6" />
             측정 & 분석

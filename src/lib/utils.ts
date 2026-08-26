@@ -16,6 +16,13 @@ const universalKeyMap: Record<string, string> = {
     '이름': 'name',
     '성별': 'gender',
     '접속코드': 'accessCode',
+    '주민등록번호': 'residentRegistrationNumber',
+    '보호자명': 'guardianName',
+    '혈액형': 'bloodType',
+    '정식학교명': 'officialSchoolName',
+    '담임교사명': 'teacherName',
+    '새 정식학교명': 'newOfficialSchoolName',
+    '새 담임교사명': 'newTeacherName',
     // Promotion
     '새 학년': 'newGrade',
     '새 반': 'newClassNum',
