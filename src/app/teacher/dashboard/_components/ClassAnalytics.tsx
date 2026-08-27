@@ -123,7 +123,7 @@ export default function ClassAnalytics({
   allStudents: Student[];
   allItems: MeasurementItem[];
   allRecords: MeasurementRecord[];
-  onRecordUpdate: () => void;
+  onRecordUpdate: (recordsOrId?: MeasurementRecord[] | string, action?: 'update' | 'delete') => void;
   sportsClubs: SportsClub[];
 }) {
   const { school } = useAuth();
@@ -199,7 +199,7 @@ export default function ClassAnalytics({
     if (!school) return;
     try {
       await deleteRecord(school, recordId);
-      onRecordUpdate();
+      onRecordUpdate(recordId, 'delete');
       // Update local state for immediate feedback
       setStudentRecords(prev => prev.filter(r => r.id !== recordId));
       toast({ title: "기록 삭제 완료" });
@@ -288,44 +288,79 @@ export default function ClassAnalytics({
   }, [selectedStudent, selectedGrade, selectedClassNum, selectedClubId, allRecords, allItems, comparisonType, filteredStudents, allStudents, school, sportsClubs]);
 
   const growthData = useMemo(() => {
-    if (!selectedStudent || !progressChartItem || measurementPeriods.length === 0) return [];
-    
-    return measurementPeriods.map((p: MeasurementPeriod) => {
-        let value: number | null = null;
-        let displayValue = '-';
+    if (!selectedStudent || !progressChartItem || studentRecords.length === 0) return [];
 
-        if (progressChartItem === "PAPS 종합 점수") {
-            let total = 0;
-            let foundAny = false;
-            papsItems.forEach((item: MeasurementItem) => {
-                const itemRecs = studentRecords.filter((r: MeasurementRecord) => r.item === item.name && r.date >= p.startDate && r.date <= p.endDate);
-                if (itemRecs.length > 0) {
-                    let best;
-                    if (item.recordType === 'time') best = itemRecs.sort((a: MeasurementRecord, b: MeasurementRecord) => a.value - b.value)[0];
-                    else best = itemRecs.sort((a: MeasurementRecord, b: MeasurementRecord) => b.value - a.value)[0];
-                    const score = calculatePapsScore(item.name, selectedStudent, best.value);
-                    if (score !== null) { total += score; foundAny = true; }
-                }
-            });
-            if (foundAny) { value = total; displayValue = `${total}점`; }
-        } else {
-            const item = allItems.find((i: MeasurementItem) => i.name === progressChartItem);
-            const itemRecs = studentRecords.filter((r: MeasurementRecord) => r.item === progressChartItem && r.date >= p.startDate && r.date <= p.endDate);
-            if (itemRecs.length > 0) {
-                let best;
-                if (item?.recordType === 'time') best = itemRecs.sort((a: MeasurementRecord, b: MeasurementRecord) => a.value - b.value)[0];
-                else best = itemRecs.sort((a: MeasurementRecord, b: MeasurementRecord) => b.value - a.value)[0];
-                value = best.value;
-                displayValue = `${best.value}${item?.unit || ''}`;
+    if (progressChartItem === "PAPS 종합 점수") {
+      // 날짜별로 그룹화하여 날짜별 PAPS 종합 점수 계산
+      const dateMap = new Map<string, MeasurementRecord[]>();
+      studentRecords.filter(r => papsItems.some(pi => pi.name === r.item)).forEach(r => {
+        if (!dateMap.has(r.date)) dateMap.set(r.date, []);
+        dateMap.get(r.date)!.push(r);
+      });
+
+      const sortedDates = Array.from(dateMap.keys()).sort();
+
+      return sortedDates.map(dateStr => {
+        const dayRecs = dateMap.get(dateStr)!;
+        let total = 0;
+        let foundAny = false;
+
+        papsItems.forEach((item: MeasurementItem) => {
+          const itemRecs = dayRecs.filter(r => r.item === item.name);
+          if (itemRecs.length > 0) {
+            let best;
+            if (item.recordType === 'time') best = itemRecs.sort((a, b) => a.value - b.value)[0];
+            else best = itemRecs.sort((a, b) => b.value - a.value)[0];
+            const score = calculatePapsScore(item.name, selectedStudent, best.value);
+            if (score !== null) {
+              total += score;
+              foundAny = true;
             }
-        }
-        return { name: p.name, value, displayValue };
-    }).filter((d: { value: number | null }) => d.value !== null);
-  }, [selectedStudent, progressChartItem, studentRecords, allItems, measurementPeriods, papsItems]);
+          }
+        });
+
+        const formattedDate = dateStr.length >= 10 ? dateStr.substring(5) : dateStr;
+        return {
+          name: formattedDate,
+          fullDate: dateStr,
+          value: foundAny ? total : null,
+          displayValue: foundAny ? `${total}점` : '-'
+        };
+      }).filter(d => d.value !== null);
+
+    } else {
+      const item = allItems.find(i => i.name === progressChartItem);
+      const itemRecs = studentRecords.filter(r => r.item === progressChartItem);
+      if (itemRecs.length === 0) return [];
+
+      const dateMap = new Map<string, MeasurementRecord[]>();
+      itemRecs.forEach(r => {
+        if (!dateMap.has(r.date)) dateMap.set(r.date, []);
+        dateMap.get(r.date)!.push(r);
+      });
+
+      const sortedDates = Array.from(dateMap.keys()).sort();
+
+      return sortedDates.map(dateStr => {
+        const dayRecs = dateMap.get(dateStr)!;
+        let best;
+        if (item?.recordType === 'time') best = dayRecs.sort((a, b) => a.value - b.value)[0];
+        else best = dayRecs.sort((a, b) => b.value - a.value)[0];
+
+        const formattedDate = dateStr.length >= 10 ? dateStr.substring(5) : dateStr;
+        return {
+          name: formattedDate,
+          fullDate: dateStr,
+          value: best.value,
+          displayValue: `${best.value}${item?.unit || ''}`
+        };
+      });
+    }
+  }, [selectedStudent, progressChartItem, studentRecords, allItems, papsItems]);
 
   const isGrowthChartAvailable = useMemo(() => {
-    return measurementPeriods.length >= 2 && growthData.length >= 2;
-  }, [measurementPeriods, growthData]);
+    return growthData.length >= 2;
+  }, [growthData]);
 
   return (
     <Card className="bg-transparent shadow-none border-none">
@@ -396,33 +431,28 @@ export default function ClassAnalytics({
                               {activeItems.map(i => <SelectItem key={i.id} value={i.name}>{i.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                        <span className="text-[10px] text-muted-foreground">
-                            {isGrowthChartAvailable ? '주간별 성장 곡선' : '기록 현황'}
+                        <span className="text-[10px] text-muted-foreground font-semibold">
+                            {isGrowthChartAvailable ? '일자별 성장 곡선' : '기록 현황'}
                         </span>
                       </div>
-                      {measurementPeriods.length >= 2 ? (
-                        growthData.length > 0 ? (
-                          <div className="h-[200px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={growthData}>
-                                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                                <XAxis dataKey="name" fontSize={10} />
-                                <YAxis domain={[0, progressChartItem === "PAPS 종합 점수" ? 100 : 'auto']} />
-                                <Tooltip />
-                                <Line type="monotone" dataKey="value" name="기록" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 6, fill: "hsl(var(--primary))" }} label={{ position: 'top', fontSize: 10, fill: 'hsl(var(--primary))', fontWeight: 'bold' }} />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-                        ) : (
-                          <div className="h-[200px] flex items-center justify-center border rounded-md bg-muted/20 text-xs text-muted-foreground italic">
-                            설정된 측정 주간에 기록이 없습니다.
-                          </div>
-                        )
+                      {growthData.length > 0 ? (
+                        <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={growthData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
+                              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                              <XAxis dataKey="name" fontSize={11} tick={{ fontWeight: 'bold' }} />
+                              <YAxis domain={[0, progressChartItem === "PAPS 종합 점수" ? 100 : 'auto']} fontSize={10} />
+                              <Tooltip 
+                                labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate || _}
+                                formatter={(value: any, name: any, item: any) => [item?.payload?.displayValue || value, '측정 기록']}
+                              />
+                              <Line type="monotone" dataKey="value" name="기록" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 6, fill: "hsl(var(--primary))" }} label={{ position: 'top', fontSize: 11, fill: 'hsl(var(--primary))', fontWeight: 'bold' }} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
                       ) : (
                         <div className="h-[200px] flex items-center justify-center border rounded-md bg-muted/20 text-xs text-muted-foreground italic">
-                          {measurementPeriods.length === 0
-                            ? '종목 관리에서 측정 주간을 설정해주세요.'
-                            : '성장 그래프는 측정 주간이 2개 이상 설정되어야 표시됩니다.'}
+                          선택한 종목의 측정 기록이 없습니다.
                         </div>
                       )}
                     <div className="p-4 bg-muted/50 rounded-lg text-sm">

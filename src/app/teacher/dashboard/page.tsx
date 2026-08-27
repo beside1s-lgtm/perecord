@@ -18,7 +18,6 @@ import ClassAnalytics from "./_components/ClassAnalytics";
 import RecordBrowser from "./_components/RecordBrowser";
 import Ranking from "./_components/Ranking";
 import RecordInput from "./_components/RecordInput";
-import AiWelcome from "./_components/AiWelcome";
 import TournamentManagement from "./_components/TournamentManagement";
 import TeamBalancer from "./_components/TeamBalancer";
 import SportsClubManagement from "./_components/SportsClubManagement";
@@ -134,10 +133,10 @@ export default function TeacherDashboardPage() {
           try {
             const lightStudents = updated.students.map(s => ({
               id: s.id, name: s.name, grade: s.grade, classNum: s.classNum,
-              number: s.number, gender: s.gender, personalCode: s.personalCode,
+              studentNum: s.studentNum, gender: s.gender, personalCode: s.personalCode,
               school: s.school, guardianName: s.guardianName,
               residentRegistrationNumber: s.residentRegistrationNumber,
-              bloodType: s.bloodType, formalSchoolName: s.formalSchoolName,
+              bloodType: s.bloodType, officialSchoolName: s.officialSchoolName,
               schoolHistory: s.schoolHistory,
             }));
             const cacheData = { ...updated, records: [], students: lightStudents };
@@ -182,7 +181,7 @@ export default function TeacherDashboardPage() {
   }, []);
 
   // 로컬 상태 즉시 갱신 핸들러 (불필요한 전체 네트워크 리로드 방지)
-  const handleRecordUpdate = useCallback((recordsOrId: MeasurementRecord[] | string, action: 'update' | 'delete' = 'update') => {
+  const handleRecordUpdate = useCallback((recordsOrId?: MeasurementRecord[] | string, action: 'update' | 'delete' = 'update') => {
     setData(prev => {
       let updatedRecords = [...prev.records];
       if (action === 'delete') {
@@ -334,31 +333,17 @@ export default function TeacherDashboardPage() {
   if (isAuthLoading) return <DashboardSkeleton />;
 
   return (
-
-    <div className="container mx-auto p-2 sm:p-10 space-y-8 sm:space-y-12 pb-32">
+    <div className="container mx-auto p-2 sm:p-10 space-y-6 sm:space-y-8 pb-32">
       <div className="no-print">
-        <DashboardHeader onStatsRebuilt={() => load(true)} />
+        <DashboardHeader 
+          onStatsRebuilt={() => load(true)}
+          allStudents={data.students}
+          items={data.items}
+          records={data.records}
+          statistics={data.statistics}
+          sportsClubs={data.clubs}
+        />
       </div>
-      
-      <Card className="premium-card bg-primary/[0.04] border-primary/20 overflow-hidden relative group no-print">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32 transition-transform group-hover:scale-125 duration-700" />
-        <CardHeader className="pb-4 relative z-10">
-          <CardTitle className="flex items-center gap-3 text-primary font-headline text-2xl sm:text-3xl">
-            <Bot className="h-8 w-8 text-primary/80 animate-pulse" />
-            <span className="premium-gradient-text tracking-tighter">AI 인텔리전스 센터</span>
-          </CardTitle>
-          <CardDescription className="text-base font-bold opacity-70">실시간 데이터 수집 및 고성능 AI 모형을 통한 학교 체육 통합 분석 리포트를 제공합니다.</CardDescription>
-        </CardHeader>
-        <CardContent className="relative z-10 pt-2">
-          <AiWelcome 
-            title="학교 전체 AI 지능형 리포트 확인" 
-            allStudents={data.students} 
-            items={data.items} 
-            records={data.records} 
-            statistics={data.statistics}
-          />
-        </CardContent>
-      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex items-center justify-start overflow-x-auto hide-scrollbar w-full mb-10 h-16 sm:h-20 p-2 bg-muted/20 border border-border/40 rounded-[1.5rem] sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-2 sm:gap-3 no-print">

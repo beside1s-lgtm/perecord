@@ -319,12 +319,32 @@ export const getRecords = async (school: string): Promise<MeasurementRecord[]> =
 export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pick<MeasurementRecord, 'school' | 'studentId' | 'item' | 'value' | 'date'>): Promise<MeasurementRecord> => {
   await signIn();
   const recordsRef = collection(db, 'schools', record.school, 'records');
-  const q = query(recordsRef, where('studentId', '==', record.studentId), where('item', '==', record.item), where('date', '==', record.date), limit(1));
   
   try {
+    let finalRecord: MeasurementRecord;
+
+    // 만약 이미 문서 ID가 명시되어 있다면 getDocs 쿼리 없이 즉시 업데이트/생성
+    if (record.id) {
+      const docRef = doc(recordsRef, record.id);
+      const updates: any = { value: record.value };
+      if (record.height !== undefined) updates.height = record.height;
+      if (record.weight !== undefined) updates.weight = record.weight;
+      if (record.date !== undefined) updates.date = record.date;
+      if (record.item !== undefined) updates.item = record.item;
+      if (record.studentId !== undefined) updates.studentId = record.studentId;
+      if (record.school !== undefined) updates.school = record.school;
+
+      const cleanObj: Record<string, any> = {};
+      Object.entries(updates).forEach(([k, v]) => { if (v !== undefined) cleanObj[k] = v; });
+
+      await setDoc(docRef, cleanObj, { merge: true });
+      finalRecord = { ...record, id: docRef.id } as MeasurementRecord;
+      return finalRecord;
+    }
+
+    const q = query(recordsRef, where('studentId', '==', record.studentId), where('item', '==', record.item), where('date', '==', record.date), limit(1));
     const querySnapshot = await getDocs(q);
 
-    let finalRecord: MeasurementRecord;
     if (!querySnapshot.empty) {
       const docRef = querySnapshot.docs[0].ref;
       const updates: any = { value: record.value };
@@ -333,8 +353,7 @@ export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pic
       await updateDoc(docRef, updates);
       finalRecord = { ...querySnapshot.docs[0].data(), id: docRef.id, value: record.value, height: record.height, weight: record.weight } as MeasurementRecord;
     } else {
-      const newRef = record.id ? doc(recordsRef, record.id) : doc(recordsRef);
-      // Firestore는 undefined 값을 허용하지 않으므로 undefined 필드를 제거합니다
+      const newRef = doc(recordsRef);
       const rawRecord = { ...record, id: newRef.id };
       const finalObj: Record<string, any> = {};
       Object.entries(rawRecord).forEach(([k, v]) => { if (v !== undefined) finalObj[k] = v; });
@@ -357,10 +376,8 @@ export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pic
 
 export const deleteRecord = async (school: string, recordId: string) => {
   await signIn();
-  const snap = await getDoc(doc(db, 'schools', school, 'records', recordId));
-  const itemName = snap.exists() ? snap.data().item : null;
+  // 불필요한 getDoc 읽기를 제거하고 즉시 1회 deleteDoc 호출
   await deleteDoc(doc(db, 'schools', school, 'records', recordId));
-  // if (itemName) updateItemStatistics(school, itemName);
 };
 
 export const deleteRecordsByDateAndItem = async (school: string, date: string, item: string): Promise<number> => {

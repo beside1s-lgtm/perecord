@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, UserCircle, RefreshCw } from "lucide-react";
+import { LogOut, UserCircle, RefreshCw, Bot, Sparkles } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useTheme } from "next-themes";
@@ -16,6 +16,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AiIntelligenceCenterDialog } from "@/app/teacher/dashboard/_components/AiIntelligenceCenterDialog";
+import type { Student, MeasurementItem, MeasurementRecord, ItemStatistics, SportsClub } from "@/lib/types";
 
 export function DashboardHeaderContents() {
   const { school } = useAuth();
@@ -28,14 +30,27 @@ export function DashboardHeaderContents() {
 
 interface DashboardHeaderProps {
   onStatsRebuilt?: () => void;
+  allStudents?: Student[];
+  items?: MeasurementItem[];
+  records?: MeasurementRecord[];
+  statistics?: ItemStatistics[];
+  sportsClubs?: SportsClub[];
 }
 
-export function DashboardHeader({ onStatsRebuilt }: DashboardHeaderProps) {
+export function DashboardHeader({ 
+  onStatsRebuilt,
+  allStudents = [],
+  items = [],
+  records = [],
+  statistics = [],
+  sportsClubs = []
+}: DashboardHeaderProps) {
   const { user, school, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
   const [isRebuilding, setIsRebuilding] = useState(false);
+  const [isAiCenterOpen, setIsAiCenterOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -63,13 +78,26 @@ export function DashboardHeader({ onStatsRebuilt }: DashboardHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card/80 px-2 sm:px-6 backdrop-blur-sm">
-      <div className="flex items-center gap-2">
-        <Image src="/200x200.png" alt="Logo" width={24} height={24} className="rounded-md" />
-        <h1 className="hidden sm:block text-lg font-bold text-primary font-headline">
-          체육 성장 기록 시스템
-        </h1>
-      </div>
+    <>
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card/80 px-2 sm:px-6 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Image src="/200x200.png" alt="Logo" width={24} height={24} className="rounded-md" />
+          <h1 className="hidden sm:block text-base md:text-lg font-bold text-primary font-headline tracking-tight">
+            체육 성장 기록 시스템
+          </h1>
+
+          {/* AI 인텔리전스 센터 바로가기 버튼 */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setIsAiCenterOpen(true)}
+            className="flex items-center gap-1.5 h-8 px-2.5 sm:px-3 bg-gradient-to-r from-primary via-blue-600 to-indigo-600 hover:from-primary/90 hover:to-indigo-700 text-white font-bold rounded-lg shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Bot className="h-4 w-4 animate-pulse" />
+            <span className="text-xs font-black">AI 인텔리전스 센터</span>
+            <Sparkles className="h-3 w-3 text-amber-300 hidden sm:inline" />
+          </Button>
+        </div>
       <div className="flex items-center gap-2 sm:gap-3">
         {/* 통계 재계산 버튼 */}
         <TooltipProvider delayDuration={300}>
@@ -120,5 +148,16 @@ export function DashboardHeader({ onStatsRebuilt }: DashboardHeaderProps) {
         </Button>
       </div>
     </header>
+
+    <AiIntelligenceCenterDialog
+      open={isAiCenterOpen}
+      onOpenChange={setIsAiCenterOpen}
+      allStudents={allStudents}
+      items={items}
+      records={records}
+      statistics={statistics}
+      sportsClubs={sportsClubs}
+    />
+  </>
   );
 }

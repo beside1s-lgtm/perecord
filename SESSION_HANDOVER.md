@@ -1,19 +1,28 @@
 # Session Handover
 
 ## Current Status (현재 상태)
-- NEIS PAPS 일괄입력용 엑셀 양식의 띄어쓰기 및 단위명 최종 정밀 교정을 완료했습니다 (`'앉아윗몸 앞으로 굽히기(cm)'`, `'체중(cm)'` 등).
-- 특정 학생의 기록 추출 버튼 클릭 시, 추출할 종목을 선택할 수 있는 팝업(체크박스 다이얼로그)을 신설하고, 추출 파일의 포맷을 NEIS 표준 가로형 1행 구조로 맞춤화했습니다.
-- Next.js 프로덕션 빌드 테스트 통과 후 원격 Git(origin/main) 리포지토리로 코드를 성공적으로 Push하여 App Hosting 자동 배포를 트리거했습니다.
+- **AI 인텔리전스 센터 헤더 버튼화 및 통합 개편**:
+  - 대시보드 상단 거대 배너를 제거하여 화면 영역을 쾌적하게 확보하고, 헤더 '체육 성장 기록 시스템' 우측에 `[AI 인텔리전스 센터]` 전용 버튼 신설.
+  - 종합 모달(`AiIntelligenceCenterDialog.tsx`) 내에 1) 학교 전체 AI 분석, 2) 학급/클럽 AI 분석, 3) 개별 학생 AI 스카우팅 리포트 & 역량 레이더 차트 기능을 일원화 통합.
+- **개별 학생 성장 분석 꺾은선 그래프 연동**:
+  - 측정 주간 설정 의존성을 완전히 제거하고, 등록된 실제 측정 일자(`date`) 순서대로 PAPS 종합 점수 및 개별 종목의 변화 추이를 꺾은선 그래프로 직관적 렌더링.
+- **단건 기록 저장 및 삭제 속도 최적화**:
+  - `deleteRecord`의 불필요한 `getDoc` 읽기를 제거하여 `deleteDoc` 1회 즉시 호출로 단축하고, UI 목록에서 즉시 반영되도록 개선.
+  - `addOrUpdateRecord`에서 ID 존재 시 중복 검사 쿼리를 생략하여 저장 속도 개선.
+- **프로덕션 배포 완료**: Firebase App Hosting 및 Firestore 보안 규칙(`studio-64590200-ecf64`) 배포 완료 (`https://perecord.cjwave.kr`).
 
 ## Modified Files (수정된 주요 파일)
-- `src/app/teacher/dashboard/_components/DatabaseManagement.tsx`
-  - **변경 사유:** 띄어쓰기 수정 및 특정 학생 대상 NEIS 엑셀 출력 함수 `handleDownloadStudentRecordsNeis` 추가. 
-  - 추출할 종목을 제어할 수 있는 Dialog 및 Checkbox 컴포넌트 마운트 및 연동.
+- `src/components/DashboardHeader.tsx`: 헤더에 AI 인텔리전스 센터 바로가기 버튼 및 다이얼로그 마운트
+- `src/app/teacher/dashboard/_components/AiIntelligenceCenterDialog.tsx`: 학교/학급/학생 종합 AI 분석 모달 컴포넌트 신규 작성
+- `src/app/teacher/dashboard/_components/ClassAnalytics.tsx`: 일자별 시계열 꺾은선 그래프 연동 및 단건 삭제 파라미터 연동
+- `src/app/teacher/dashboard/page.tsx`: 상단 대형 AI 카드 배너 제거 및 헤더 데이터 props 연동
+- `src/lib/store.ts`: deleteRecord 불필요 getDoc 제거 및 단건 addOrUpdateRecord 최적화
+- `package.json`: 로컬 개발 서버 포트 번호 분리(9005)
 
 ## Next Steps (다음 작업 목표)
-- 원격 서버에 배포 완료된 실서버 환경에서 개별 학생 기록 추출 및 NEIS 일괄입력이 정상 동작하는지 실측 및 검수.
-- 사용자 피드백에 따라 다이얼로그의 반응형 레이아웃 및 UX 디테일 조정.
+- 실서버(`https://perecord.cjwave.kr`)에서 AI 인텔리전스 센터 3대 탭 리포트 생성 및 개별 학생 성장 곡선 정상 작동 검수.
 
 ## Important Context (핵심 컨텍스트)
-- NEIS PAPS 일괄 업로드 시스템은 띄어쓰기 및 `'체중(cm)'`과 같은 고유한 오타성 단위 헤더까지 정확하게 일치해야 정상 동작하므로, 향후 해당 필드 스키마 수정 시 주의가 필요합니다.
-- 다이얼로그 컴포넌트는 `@/components/ui/dialog` 및 `@/components/ui/checkbox` 패키지를 가져와 사용하고 있습니다.
+- Firebase 프로젝트 ID: `studio-64590200-ecf64`, 배포 도메인: `https://perecord.cjwave.kr`
+- 로컬 개발 서버 포트: `9005` (`http://localhost:9005`)
+
