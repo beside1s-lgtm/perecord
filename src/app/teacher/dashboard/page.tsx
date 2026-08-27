@@ -251,13 +251,13 @@ export default function TeacherDashboardPage() {
            exit="exit"
            className="w-full"
         >
-          <TabsContent value="measurement" className="space-y-6 mt-0">
+          <TabsContent value="measurement" className="space-y-2 sm:space-y-6 mt-0">
             <Tabs defaultValue="input">
-              <TabsList className="grid w-full grid-cols-4 mb-6 bg-muted/30 p-1 rounded-xl h-auto sm:h-12 border border-border/50">
-                <TabsTrigger value="input" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">입력</TabsTrigger>
-                <TabsTrigger value="analysis" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">분석</TabsTrigger>
-                <TabsTrigger value="browser" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">조회</TabsTrigger>
-                <TabsTrigger value="ranking" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">순위</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
+                <TabsTrigger value="input" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">입력</TabsTrigger>
+                <TabsTrigger value="analysis" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">분석</TabsTrigger>
+                <TabsTrigger value="browser" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">조회</TabsTrigger>
+                <TabsTrigger value="ranking" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">순위</TabsTrigger>
               </TabsList>
               <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>}>
                 <TabsContent value="input">
@@ -280,12 +280,12 @@ export default function TeacherDashboardPage() {
             <TheoryExamManagement allStudents={data.students} sportsClubs={data.clubs} />
           </TabsContent>
 
-          <TabsContent value="competition" className="space-y-6 mt-0">
+          <TabsContent value="competition" className="space-y-2 sm:space-y-6 mt-0">
             <Tabs defaultValue="tournament">
-              <TabsList className="grid w-full grid-cols-3 mb-6 bg-muted/30 p-1 rounded-xl h-auto sm:h-12 border border-border/50">
-                <TabsTrigger value="tournament" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">대회</TabsTrigger>
-                <TabsTrigger value="balancer" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">편성</TabsTrigger>
-                <TabsTrigger value="clubs" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">클럽</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
+                <TabsTrigger value="tournament" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">대회</TabsTrigger>
+                <TabsTrigger value="balancer" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">편성</TabsTrigger>
+                <TabsTrigger value="clubs" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">클럽</TabsTrigger>
               </TabsList>
               <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
                 <TabsContent value="tournament">
@@ -301,13 +301,13 @@ export default function TeacherDashboardPage() {
             </Tabs>
           </TabsContent>
 
-          <TabsContent value="data" className="space-y-6 mt-0">
+          <TabsContent value="data" className="space-y-2 sm:space-y-6 mt-0">
             <Tabs defaultValue="students">
-              <TabsList className="grid w-full grid-cols-4 mb-6 bg-muted/30 p-1 rounded-xl h-auto sm:h-12 border border-border/50">
-                <TabsTrigger value="students" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">명부</TabsTrigger>
-                <TabsTrigger value="items" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">종목</TabsTrigger>
-                <TabsTrigger value="db" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">DB</TabsTrigger>
-                <TabsTrigger value="health-record" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">건강기록부</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
+                <TabsTrigger value="students" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">명부</TabsTrigger>
+                <TabsTrigger value="items" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">종목</TabsTrigger>
+                <TabsTrigger value="db" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">DB</TabsTrigger>
+                <TabsTrigger value="health-record" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">건강기록부</TabsTrigger>
               </TabsList>
               <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
                 <TabsContent value="students">
@@ -333,7 +333,7 @@ export default function TeacherDashboardPage() {
   if (isAuthLoading) return <DashboardSkeleton />;
 
   return (
-    <div className="container mx-auto p-2 sm:p-10 space-y-6 sm:space-y-8 pb-32">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 md:px-10 py-1.5 sm:py-6 space-y-2 sm:space-y-6 pb-32 overflow-x-hidden">
       <div className="no-print">
         <DashboardHeader 
           onStatsRebuilt={() => load(true)}
@@ -345,23 +345,27 @@ export default function TeacherDashboardPage() {
         />
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex items-center justify-start overflow-x-auto hide-scrollbar w-full mb-10 h-16 sm:h-20 p-2 bg-muted/20 border border-border/40 rounded-[1.5rem] sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-2 sm:gap-3 no-print">
-          <TabsTrigger value="measurement" className="flex-1 min-w-[130px] h-full rounded-[1rem] sm:rounded-[2rem] text-sm sm:text-lg font-black tracking-tight flex items-center justify-center gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all">
-            <LineChart className="w-5 h-5 sm:w-6 sm:h-6" />
-            측정 & 분석
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full overflow-x-hidden">
+        <TabsList className="grid grid-cols-4 w-full mb-2 sm:mb-6 h-12 sm:h-18 p-1 sm:p-2 bg-muted/20 border border-border/40 rounded-xl sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-1 sm:gap-3 no-print">
+          <TabsTrigger value="measurement" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
+            <LineChart className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <span className="hidden sm:inline">측정 & 분석</span>
+            <span className="sm:hidden leading-none">측정</span>
           </TabsTrigger>
-          <TabsTrigger value="theory" className="flex-1 min-w-[130px] h-full rounded-[1rem] sm:rounded-[2rem] text-sm sm:text-lg font-black tracking-tight flex items-center justify-center gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all">
-            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
-            이론 평가
+          <TabsTrigger value="theory" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
+            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <span className="hidden sm:inline">이론 평가</span>
+            <span className="sm:hidden leading-none">이론</span>
           </TabsTrigger>
-          <TabsTrigger value="competition" className="flex-1 min-w-[130px] h-full rounded-[1rem] sm:rounded-[2rem] text-sm sm:text-lg font-black tracking-tight flex items-center justify-center gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all">
-            <Swords className="w-5 h-5 sm:w-6 sm:h-6" />
-            대회 & 팀
+          <TabsTrigger value="competition" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
+            <Swords className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <span className="hidden sm:inline">대회 & 팀</span>
+            <span className="sm:hidden leading-none">대회</span>
           </TabsTrigger>
-          <TabsTrigger value="data" className="flex-1 min-w-[130px] h-full rounded-[1rem] sm:rounded-[2rem] text-sm sm:text-lg font-black tracking-tight flex items-center justify-center gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all">
-            <Database className="w-5 h-5 sm:w-6 sm:h-6" />
-            데이터 관리
+          <TabsTrigger value="data" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
+            <Database className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <span className="hidden sm:inline">데이터 관리</span>
+            <span className="sm:hidden leading-none">관리</span>
           </TabsTrigger>
         </TabsList>
 

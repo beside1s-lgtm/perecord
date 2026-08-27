@@ -58,7 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { parseExcel } from "@/lib/utils";
+import { parseExcel, cn } from "@/lib/utils";
 import {
   UserPlus,
   Trash2,
@@ -529,16 +529,16 @@ export function StudentManagement({
   }
 
   return (
-    <Card className="bg-transparent shadow-none border-none">
-      <CardHeader>
-        <CardTitle>학생 관리</CardTitle>
-        <CardDescription>학생을 개별 또는 일괄 등록하고 관리합니다.</CardDescription>
+    <Card className="bg-transparent shadow-none border-none w-full max-w-full">
+      <CardHeader className="px-0 sm:px-6 py-1 sm:py-3">
+        <CardTitle className="text-base sm:text-xl font-bold truncate">학생 관리</CardTitle>
+        <CardDescription className="text-[11px] sm:text-xs text-muted-foreground truncate">학생을 개별 또는 일괄 등록하고 관리합니다.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-0 sm:px-6 py-1 sm:py-3">
 
         {/* 상단 액션 바 */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 w-full md:w-auto">
 
             {/* 개별 학생 추가 */}
             <AddStudentDialog onAddStudent={handleAddStudent} school={school || ''} />
@@ -546,10 +546,10 @@ export function StudentManagement({
             {/* ── 일괄 등록 드롭다운 ── */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9" disabled={isUploading}>
+                <Button variant="outline" size="sm" className="h-7 sm:h-8 text-[11px] sm:text-xs px-2 sm:px-2.5" disabled={isUploading}>
                   {isUploading
-                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 등록 중...</>
-                    : <><FileUp className="mr-2 h-4 w-4" /> 일괄 등록 <ChevronDown className="ml-1 h-3 w-3" /></>
+                    ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> 등록 중...</>
+                    : <><FileUp className="mr-1.5 h-3.5 w-3.5" /> 일괄 등록 <ChevronDown className="ml-1 h-3 w-3" /></>
                   }
                 </Button>
               </DropdownMenuTrigger>
@@ -622,29 +622,29 @@ export function StudentManagement({
             <BatchPhotoUploadDialog students={sortedStudents} onComplete={onStudentsUpdate} school={school || ''} />
 
             {/* 검색 */}
-            <div className="relative ml-auto lg:ml-2 w-full lg:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="relative w-full sm:w-44 lg:w-56">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="학생 이름 검색..."
                 value={searchTerm}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9"
+                className="pl-8 h-7 sm:h-8 text-[11px] sm:text-xs"
               />
             </div>
           </div>
 
           {/* 우측: 필터 + 다운로드 + 삭제 */}
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 w-full md:w-auto justify-start md:justify-end">
+            <div className="flex items-center gap-1">
               <Select value={selectedGrade} onValueChange={(v) => { setSelectedGrade(v); setSelectedClassNum("all"); }}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="학년" /></SelectTrigger>
+                <SelectTrigger className="w-[68px] sm:w-[85px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue placeholder="학년" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">전체 학년</SelectItem>
                   {grades.map(g => <SelectItem key={g} value={g}>{g}학년</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={selectedClassNum} onValueChange={setSelectedClassNum} disabled={selectedGrade === "all"}>
-                <SelectTrigger className="w-[100px] h-9"><SelectValue placeholder="반" /></SelectTrigger>
+                <SelectTrigger className="w-[58px] sm:w-[75px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue placeholder="반" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">전체 반</SelectItem>
                   {selectedGrade !== "all" && classNumsByGrade[selectedGrade]?.map(c => <SelectItem key={c} value={c}>{c}반</SelectItem>)}
@@ -655,16 +655,16 @@ export function StudentManagement({
             {/* 명단 다운로드 드롭다운 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="sm" className="h-9 px-3">
-                  <FileDown className="mr-2 h-4 w-4" /> 명단 다운로드 <ChevronDown className="ml-1 h-3 w-3" />
+                <Button variant="secondary" size="sm" className="h-7 sm:h-8 px-2 sm:px-2.5 text-[11px] sm:text-xs">
+                  <FileDown className="mr-1 h-3.5 w-3.5" /> <span className="hidden sm:inline">명단 다운로드</span><span className="sm:hidden">다운</span> <ChevronDown className="ml-0.5 h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleDownloadList}>
+                <DropdownMenuItem onClick={handleDownloadList} className="text-xs">
                   <Users className="mr-2 h-4 w-4 text-blue-500" />
                   기본 명단 (체육 기록용)
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadHealthList}>
+                <DropdownMenuItem onClick={handleDownloadHealthList} className="text-xs">
                   <Stethoscope className="mr-2 h-4 w-4 text-green-500" />
                   건강기록부 통합 명단
                 </DropdownMenuItem>
@@ -677,10 +677,10 @@ export function StudentManagement({
                 <Button
                   variant="destructive"
                   size="sm"
-                  className="h-9 px-3"
+                  className="h-7 sm:h-8 px-2 sm:px-2.5 text-[11px] sm:text-xs"
                   disabled={selectedIds.length === 0 || isProcessing}
                 >
-                  {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  {isProcessing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1 h-3.5 w-3.5" />}
                   삭제 ({selectedIds.length})
                 </Button>
               </AlertDialogTrigger>
@@ -696,40 +696,64 @@ export function StudentManagement({
         <div className="border rounded-md overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]"><Checkbox checked={sortedStudents.length > 0 && selectedIds.length === sortedStudents.length} onCheckedChange={(c) => {
+              <TableRow className="h-8">
+                <TableHead className="w-8 sm:w-10 text-center p-1"><Checkbox checked={sortedStudents.length > 0 && selectedIds.length === sortedStudents.length} onCheckedChange={(c) => {
                   const newSelection: Record<string, boolean> = {};
                   if (c) sortedStudents.forEach(s => newSelection[s.id] = true);
                   setSelection(newSelection);
                 }} /></TableHead>
-                <TableHead>사진</TableHead><TableHead>학년</TableHead><TableHead>반</TableHead><TableHead>번호</TableHead><TableHead>이름</TableHead><TableHead>성별</TableHead><TableHead>접속 코드</TableHead>
-                <TableHead>주민번호</TableHead>
-                <TableHead className="text-right">관리</TableHead>
+                <TableHead className="w-14 sm:w-16 text-center p-1 text-[11px] sm:text-xs font-bold">사진</TableHead>
+                <TableHead className="p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">학생 정보</TableHead>
+                <TableHead className="w-16 sm:w-20 text-center p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">접속 코드</TableHead>
+                <TableHead className="w-16 sm:w-20 text-center p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">건강기록부</TableHead>
+                <TableHead className="w-14 sm:w-18 text-center p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedStudents.length > 0 ? sortedStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell><Checkbox checked={selection[student.id] || false} onCheckedChange={(c) => setSelection(prev => ({...prev, [student.id]: !!c}))} /></TableCell>
-                  <TableCell><Avatar className="w-14 h-14"><AvatarImage src={student.photoUrl} /><AvatarFallback>{student.name[0]}</AvatarFallback></Avatar></TableCell>
-                  <TableCell>{student.grade}</TableCell><TableCell>{student.classNum}</TableCell><TableCell>{student.studentNum}</TableCell>
-                  <TableCell className="font-medium">{student.name}</TableCell><TableCell>{student.gender}</TableCell><TableCell>{student.accessCode}</TableCell>
-                  <TableCell>
+                <TableRow key={student.id} className="h-14 sm:h-16">
+                  <TableCell className="p-1 text-center"><Checkbox checked={selection[student.id] || false} onCheckedChange={(c) => setSelection(prev => ({...prev, [student.id]: !!c}))} /></TableCell>
+                  <TableCell className="p-1 text-center">
+                    <Avatar className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg shadow-sm border border-border/50">
+                      <AvatarImage src={student.photoUrl} className="object-cover" />
+                      <AvatarFallback className="text-xs font-bold bg-muted">{student.name[0]}</AvatarFallback>
+                    </Avatar>
+                  </TableCell>
+                  <TableCell className="p-1 whitespace-nowrap">
+                    <div className="flex flex-col justify-center">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs sm:text-sm leading-tight whitespace-nowrap">{student.name}</span>
+                        <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4", student.gender === '남' ? 'text-blue-600 border-blue-200' : 'text-pink-600 border-pink-200')}>
+                          {student.gender}
+                        </Badge>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap leading-tight mt-0.5">
+                        {student.grade}학년 {student.classNum}반 {student.studentNum}번
+                        {student.personalCode && <span className="ml-1 text-primary">· {student.personalCode}</span>}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="p-1 text-center">
+                    <span className="font-mono text-xs font-semibold bg-muted/60 px-1.5 py-0.5 rounded text-foreground">
+                      {student.accessCode}
+                    </span>
+                  </TableCell>
+                  <TableCell className="p-1 text-center">
                     {student.residentRegistrationNumber
-                      ? <Badge variant="secondary" className="text-xs font-mono">등록됨</Badge>
-                      : <span className="text-muted-foreground text-xs">-</span>
+                      ? <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">등록됨</Badge>
+                      : <span className="text-muted-foreground text-[10px]">-</span>
                     }
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingStudent(student)}>
-                        <Pencil className="h-4 w-4" />
+                  <TableCell className="p-1 text-center">
+                    <div className="flex items-center justify-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => setEditingStudent(student)} title="정보 수정">
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <PhotoEditDialog student={student} onUpdatePhoto={handleUpdatePhoto} />
                     </div>
                   </TableCell>
                 </TableRow>
-              )) : <TableRow><TableCell colSpan={10} className="h-24 text-center">등록된 학생이 없습니다.</TableCell></TableRow>}
+              )) : <TableRow><TableCell colSpan={6} className="h-20 text-center text-xs text-muted-foreground">등록된 학생이 없습니다.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </div>

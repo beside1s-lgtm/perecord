@@ -63,8 +63,14 @@
   * {
     @apply border-border;
   }
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
   body {
     @apply bg-background text-foreground transition-colors duration-300;
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   .watermark-bg, .measurement-bg, .competition-bg, .data-bg {
     position: relative;

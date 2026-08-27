@@ -561,23 +561,23 @@ export default function RecordBrowser({
 
 
   return (
-    <Card className="bg-transparent shadow-none border-none">
-        <CardHeader>
-            <CardTitle>기록 조회</CardTitle>
-            <CardDescription>
-                PAPS 종합 현황 또는 종목별 학생 기록을 조회하고 다운로드할 수 있습니다. 헤더를 클릭하여 다중 정렬을 할 수 있습니다.
+    <Card className="bg-transparent shadow-none border-none w-full max-w-full">
+        <CardHeader className="px-0 sm:px-6 py-1 sm:py-3">
+            <CardTitle className="text-base sm:text-xl font-bold truncate">기록 조회</CardTitle>
+            <CardDescription className="text-[11px] sm:text-xs text-muted-foreground truncate">
+                PAPS 종합 현황 또는 종목별 학생 기록을 조회하고 다운로드할 수 있습니다. 헤더 클릭 시 다중 정렬됩니다.
             </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0 sm:px-6 py-1 sm:py-3">
             <Tabs defaultValue="paps">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="paps">PAPS 종합</TabsTrigger>
-                    <TabsTrigger value="item">종목별 기록</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 h-7 sm:h-9 mb-1 sm:mb-3">
+                    <TabsTrigger value="paps" className="text-xs sm:text-sm py-1">PAPS 종합</TabsTrigger>
+                    <TabsTrigger value="item" className="text-xs sm:text-sm py-1">종목별 기록</TabsTrigger>
                 </TabsList>
-                <TabsContent value="paps" className="space-y-4">
-                     <div className="flex flex-wrap items-center gap-2 pt-4">
+                <TabsContent value="paps" className="space-y-2 sm:space-y-4">
+                     <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2">
                         <Select value={selectedClubId} onValueChange={(v) => { setSelectedClubId(v); if(v !== 'all') { setGradeFilter('all'); setClassNumFilter('all'); } }}>
-                          <SelectTrigger className="w-full sm:w-[150px] font-bold">
+                          <SelectTrigger className="w-[95px] sm:w-[130px] h-7 sm:h-8 text-[11px] sm:text-xs font-bold">
                             <SelectValue placeholder="클럽 필터" />
                           </SelectTrigger>
                           <SelectContent>
@@ -594,8 +594,8 @@ export default function RecordBrowser({
                                 if(value !== 'all') setSelectedClubId('all');
                             }}
                         >
-                            <SelectTrigger className="w-full sm:w-[120px]">
-                            <SelectValue placeholder="학년 선택" />
+                            <SelectTrigger className="w-[68px] sm:w-[90px] h-7 sm:h-8 text-[11px] sm:text-xs">
+                            <SelectValue placeholder="학년" />
                             </SelectTrigger>
                             <SelectContent>
                             <SelectItem value="all">전체 학년</SelectItem>
@@ -612,8 +612,8 @@ export default function RecordBrowser({
                             onValueChange={setClassNumFilter}
                             disabled={gradeFilter === 'all'}
                         >
-                            <SelectTrigger className="w-full sm:w-[120px]">
-                            <SelectValue placeholder="반 선택" />
+                            <SelectTrigger className="w-[58px] sm:w-[80px] h-7 sm:h-8 text-[11px] sm:text-xs">
+                            <SelectValue placeholder="반" />
                             </SelectTrigger>
                             <SelectContent>
                             <SelectItem value="all">전체 반</SelectItem>
@@ -627,14 +627,14 @@ export default function RecordBrowser({
                         
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={cn("w-full sm:w-[200px] justify-start text-left font-normal", !dateFilter && "text-muted-foreground")}>
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateFilter === 'latest' ? '최근 측정일 기준' : dateFilter ? format(dateFilter, "PPP") : <span>날짜 선택</span>}
+                                <Button variant={"outline"} className={cn("w-[100px] sm:w-[150px] h-7 sm:h-8 px-2 text-[11px] sm:text-xs justify-start text-left font-normal", !dateFilter && "text-muted-foreground")}>
+                                    <CalendarIcon className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="truncate">{dateFilter === 'latest' ? '최근' : dateFilter ? format(dateFilter, "MM/dd") : '날짜'}</span>
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="flex w-auto flex-col space-y-2 p-2">
                                 <Select onValueChange={(value) => value === 'latest' ? setDateFilter('latest') : setDateFilter(new Date(value))}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="h-8 text-xs">
                                         <SelectValue placeholder="측정일 선택" />
                                     </SelectTrigger>
                                     <SelectContent position="popper">
@@ -651,8 +651,8 @@ export default function RecordBrowser({
                         </Popover>
 
                         <Select value={viewType} onValueChange={(v) => setViewType(v as ViewType)}>
-                            <SelectTrigger className="w-full sm:w-[150px]">
-                                <SelectValue placeholder="표시 형식" />
+                            <SelectTrigger className="w-[75px] sm:w-[110px] h-7 sm:h-8 text-[11px] sm:text-xs">
+                                <SelectValue placeholder="형식" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="grade">등급</SelectItem>
@@ -661,19 +661,27 @@ export default function RecordBrowser({
                             </SelectContent>
                         </Select>
                         
-                        <Button onClick={handlePapsDownloadExcel} variant="outline" className="ml-auto">
-                            <FileDown className="mr-2 h-4 w-4" />
-                            엑셀 다운로드
+                        <Button onClick={handlePapsDownloadExcel} variant="outline" size="sm" className="ml-auto h-7 sm:h-8 px-2 text-xs" title="엑셀 다운로드">
+                            <FileDown className="h-3.5 w-3.5 sm:mr-1.5" />
+                            <span className="hidden sm:inline">엑셀 다운로드</span>
                         </Button>
                     </div>
                      <div className="border rounded-md overflow-x-auto">
                         <Table>
                             <TableHeader>
-                            <TableRow>
+                            <TableRow className="h-8">
                                 {finalFactorOrder.map(key => {
                                     const columnKey = key.replace(/점수|등급/g, '');
+                                    const isNarrow = ['학년', '반', '번호', '성별'].includes(columnKey);
                                     return (
-                                        <TableHead key={key} onClick={createSortHandler(columnKey, papsSort, setPapsSort)} className="cursor-pointer hover:bg-muted whitespace-nowrap">
+                                        <TableHead 
+                                            key={key} 
+                                            onClick={createSortHandler(columnKey, papsSort, setPapsSort)} 
+                                            className={cn(
+                                                "cursor-pointer hover:bg-muted whitespace-nowrap p-1 text-[11px] sm:text-xs font-bold",
+                                                isNarrow ? "w-8 sm:w-10 text-center" : columnKey === '이름' ? "min-w-[50px] text-left" : "text-center min-w-[55px] sm:min-w-[70px]"
+                                            )}
+                                        >
                                             {key}
                                             {getSortIndicator(columnKey, papsSort)}
                                         </TableHead>
@@ -684,18 +692,28 @@ export default function RecordBrowser({
                             <TableBody>
                             {sortedPapsData.length > 0 ? (
                                 sortedPapsData.map((row, index) => (
-                                <TableRow key={index}>
+                                <TableRow key={index} className="h-9 sm:h-10">
                                     {finalFactorOrder.map((key, cellIndex) => {
                                     const displayKey = key.replace(/점수|등급/g, '');
+                                    const isNarrow = ['학년', '반', '번호', '성별'].includes(displayKey);
+                                    const isName = displayKey === '이름';
                                     return (
-                                        <TableCell key={cellIndex} className="whitespace-nowrap">{row[displayKey]}</TableCell>
+                                        <TableCell 
+                                            key={cellIndex} 
+                                            className={cn(
+                                                "whitespace-nowrap p-1 text-[11px] sm:text-xs",
+                                                isNarrow ? "text-center" : isName ? "font-bold text-left" : "text-center font-medium"
+                                            )}
+                                        >
+                                            {row[displayKey]}
+                                        </TableCell>
                                     )
                                     })}
                                 </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
-                                <TableCell colSpan={finalFactorOrder.length} className="h-24 text-center">
+                                <TableCell colSpan={finalFactorOrder.length} className="h-20 text-center text-xs text-muted-foreground">
                                     선택된 조건에 해당하는 기록이 없습니다.
                                 </TableCell>
                                 </TableRow>
@@ -704,15 +722,15 @@ export default function RecordBrowser({
                         </Table>
                     </div>
                 </TabsContent>
-                <TabsContent value="item" className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2 pt-4">
+                <TabsContent value="item" className="space-y-2 sm:space-y-4">
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2">
                        <Select value={selectedItem} onValueChange={setSelectedItem}>
-                          <SelectTrigger className="w-full sm:w-[200px]">
+                          <SelectTrigger className="w-[120px] sm:w-[160px] h-7 sm:h-8 text-[11px] sm:text-xs font-semibold">
                             <SelectValue placeholder="종목 선택" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="theory-exam" className="font-bold text-primary flex items-center">
-                                <BookOpen className="h-4 w-4 mr-2" /> 이론 평가
+                                <BookOpen className="h-3.5 w-3.5 mr-1.5" /> 이론 평가
                             </SelectItem>
                             {itemsWithRecords.map((item) => (
                               <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>
@@ -720,7 +738,7 @@ export default function RecordBrowser({
                           </SelectContent>
                        </Select>
                         <Select value={selectedClubId} onValueChange={(v) => { setSelectedClubId(v); if(v !== 'all') { setItemGradeFilter('all'); setItemClassNumFilter('all'); } }}>
-                          <SelectTrigger className="w-full sm:w-[150px] font-bold">
+                          <SelectTrigger className="w-[95px] sm:w-[130px] h-7 sm:h-8 text-[11px] sm:text-xs font-bold">
                             <SelectValue placeholder="클럽 필터" />
                           </SelectTrigger>
                           <SelectContent>
@@ -730,8 +748,8 @@ export default function RecordBrowser({
                         </Select>
 
                         <Select value={itemGradeFilter} onValueChange={(value) => {setItemGradeFilter(value); setItemClassNumFilter('all'); if(value !== 'all') setSelectedClubId('all');}}>
-                            <SelectTrigger className="w-full sm:w-[120px]">
-                                <SelectValue placeholder="학년 선택" />
+                            <SelectTrigger className="w-[68px] sm:w-[90px] h-7 sm:h-8 text-[11px] sm:text-xs">
+                                <SelectValue placeholder="학년" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">전체 학년</SelectItem>
@@ -745,8 +763,8 @@ export default function RecordBrowser({
                             onValueChange={setItemClassNumFilter}
                             disabled={itemGradeFilter === 'all'}
                         >
-                            <SelectTrigger className="w-full sm:w-[120px]">
-                            <SelectValue placeholder="반 선택" />
+                            <SelectTrigger className="w-[58px] sm:w-[80px] h-7 sm:h-8 text-[11px] sm:text-xs">
+                            <SelectValue placeholder="반" />
                             </SelectTrigger>
                             <SelectContent>
                             <SelectItem value="all">전체 반</SelectItem>
@@ -757,37 +775,44 @@ export default function RecordBrowser({
                             ))}
                             </SelectContent>
                         </Select>
-                        <Button onClick={handleItemDownloadExcel} variant="outline" className="ml-auto" disabled={!selectedItem}>
-                            <FileDown className="mr-2 h-4 w-4" />
-                            엑셀 다운로드
+                        <Button onClick={handleItemDownloadExcel} variant="outline" size="sm" className="ml-auto h-7 sm:h-8 px-2 text-xs" disabled={!selectedItem} title="엑셀 다운로드">
+                            <FileDown className="h-3.5 w-3.5 sm:mr-1.5" />
+                            <span className="hidden sm:inline">엑셀 다운로드</span>
                         </Button>
                     </div>
                     <div className="border rounded-md overflow-x-auto">
                         <Table>
                             <TableHeader>
-                                <TableRow>
+                                <TableRow className="h-8">
                                     {[
-                                      { key: 'grade', label: '학년' },
-                                      { key: 'classNum', label: '반' },
-                                      { key: 'studentNum', label: '번호' },
-                                      { key: 'name', label: '이름' },
+                                      { key: 'grade', label: '학년', isNarrow: true },
+                                      { key: 'classNum', label: '반', isNarrow: true },
+                                      { key: 'studentNum', label: '번호', isNarrow: true },
+                                      { key: 'name', label: '이름', isName: true },
                                       ...(selectedItem === 'theory-exam' ? [
                                         { key: 'quizTitle', label: '평가 제목' },
                                         { key: 'score', label: '점수' },
                                         { key: 'latestDate', label: '응시일' },
-                                        { key: 'passed', label: '통과 여부' }
+                                        { key: 'passed', label: '통과' }
                                       ] : [
-                                        { key: 'latestDate', label: '최근 측정일' },
+                                        { key: 'latestDate', label: '측정일' },
                                         ...(selectedItemInfo?.isCompound ? [
-                                          { key: 'height', label: '키(cm)' },
-                                          { key: 'weight', label: '몸무게(kg)' }
+                                          { key: 'height', label: '키' },
+                                          { key: 'weight', label: '몸무게' }
                                         ] : []),
                                         { key: 'value', label: '기록' },
                                         { key: 'recordGrade', label: '등급' },
                                         { key: 'rank', label: '순위' },
                                       ])
                                     ].map((header) => (
-                                       <TableHead key={header.key} onClick={createSortHandler(header.key, itemSort, setItemSort)} className="cursor-pointer hover:bg-muted whitespace-nowrap">
+                                       <TableHead 
+                                          key={header.key} 
+                                          onClick={createSortHandler(header.key, itemSort, setItemSort)} 
+                                          className={cn(
+                                              "cursor-pointer hover:bg-muted whitespace-nowrap p-1 text-[11px] sm:text-xs font-bold",
+                                              header.isNarrow ? "w-8 sm:w-10 text-center" : header.isName ? "min-w-[50px] text-left" : "text-center min-w-[50px] sm:min-w-[70px]"
+                                          )}
+                                       >
                                           {header.label}
                                           {getSortIndicator(header.key, itemSort)}
                                        </TableHead>
@@ -797,43 +822,43 @@ export default function RecordBrowser({
                             <TableBody>
                                 {sortedItemData.length > 0 ? (
                                     sortedItemData.map((s, idx) => (
-                                        <TableRow key={`${s.id}-${idx}`}>
-                                            <TableCell>{s.grade}</TableCell>
-                                            <TableCell>{s.classNum}</TableCell>
-                                            <TableCell>{s.studentNum}</TableCell>
-                                            <TableCell>{s.name}</TableCell>
+                                        <TableRow key={`${s.id}-${idx}`} className="h-9 sm:h-10">
+                                            <TableCell className="p-1 text-center text-[11px] sm:text-xs">{s.grade}</TableCell>
+                                            <TableCell className="p-1 text-center text-[11px] sm:text-xs">{s.classNum}</TableCell>
+                                            <TableCell className="p-1 text-center text-[11px] sm:text-xs">{s.studentNum}</TableCell>
+                                            <TableCell className="p-1 text-left font-bold whitespace-nowrap text-[11px] sm:text-xs">{s.name}</TableCell>
                                             {selectedItem === 'theory-exam' ? (
                                                 <>
-                                                    <TableCell className="max-w-[200px] truncate">{(s as any).quizTitle}</TableCell>
-                                                    <TableCell>{(s as any).score}</TableCell>
-                                                    <TableCell>{(s as any).latestDate || '-'}</TableCell>
-                                                    <TableCell>
+                                                    <TableCell className="p-1 max-w-[150px] truncate text-[11px] sm:text-xs">{(s as any).quizTitle}</TableCell>
+                                                    <TableCell className="p-1 text-center font-semibold text-[11px] sm:text-xs">{(s as any).score}</TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).latestDate || '-'}</TableCell>
+                                                    <TableCell className="p-1 text-center">
                                                         {(s as any).passed !== undefined ? (
                                                             (s as any).passed ? 
-                                                                <Badge className="bg-green-100 text-green-700">통과</Badge> : 
-                                                                <Badge variant="destructive">미통과</Badge>
+                                                                <Badge className="bg-green-100 text-green-700 text-[10px] px-1 py-0">통과</Badge> : 
+                                                                <Badge variant="destructive" className="text-[10px] px-1 py-0">미통과</Badge>
                                                         ) : '-'}
                                                     </TableCell>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <TableCell>{(s as any).latestDate || '-'}</TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).latestDate || '-'}</TableCell>
                                                     {allItems.find(i => i.name === selectedItem)?.isCompound && (
                                                       <>
-                                                        <TableCell>{(s as any).height || '-'}</TableCell>
-                                                        <TableCell>{(s as any).weight || '-'}</TableCell>
+                                                        <TableCell className="p-1 text-center text-[11px] sm:text-xs">{(s as any).height || '-'}</TableCell>
+                                                        <TableCell className="p-1 text-center text-[11px] sm:text-xs">{(s as any).weight || '-'}</TableCell>
                                                       </>
                                                     )}
-                                                    <TableCell>{(s as any).value !== undefined && (s as any).value !== null ? `${(s as any).value}${allItems.find(i => i.name === selectedItem)?.unit || ''}`: '-'}</TableCell>
-                                                    <TableCell>{(s as any).recordGrade ? `${(s as any).recordGrade}등급` : '-'}</TableCell>
-                                                    <TableCell>{(s as any).rank ? `${(s as any).rank} / ${(s as any).totalRanked}` : '-'}</TableCell>
+                                                    <TableCell className="p-1 text-center font-bold whitespace-nowrap text-[11px] sm:text-xs">{(s as any).value !== undefined && (s as any).value !== null ? `${(s as any).value}${allItems.find(i => i.name === selectedItem)?.unit || ''}`: '-'}</TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).recordGrade ? `${(s as any).recordGrade}등급` : '-'}</TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).rank ? `${(s as any).rank}/${(s as any).totalRanked}` : '-'}</TableCell>
                                                 </>
                                             )}
                                         </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="h-24 text-center">
+                                        <TableCell colSpan={8} className="h-20 text-center text-xs text-muted-foreground">
                                             조회할 종목을 선택해주세요.
                                         </TableCell>
                                     </TableRow>

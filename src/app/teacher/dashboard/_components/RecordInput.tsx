@@ -358,41 +358,40 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
       </Dialog>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="batch">학급/팀별 기록</TabsTrigger>
-            <TabsTrigger value="individual">개별 기록</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 h-7 sm:h-9 mb-1 sm:mb-3">
+            <TabsTrigger value="batch" className="text-xs sm:text-sm py-1">학급/팀별 기록</TabsTrigger>
+            <TabsTrigger value="individual" className="text-xs sm:text-sm py-1">개별 기록</TabsTrigger>
         </TabsList>
         
         <TabsContent value="batch" className="animate-in fade-in-50 duration-300">
-             <Card className="bg-transparent shadow-none border-none">
-                <CardHeader>
-                    <CardTitle>학급/팀별 측정 기록</CardTitle>
-                    <CardDescription>아이들의 이전 기록을 참고하며 한 명씩 실시간으로 안전하게 저장하세요.</CardDescription>
-                    <div className="flex flex-wrap items-center gap-2 pt-4">
-                        <Select value={selectedGrade} onValueChange={v => { setSelectedGrade(v); setSelectedClassNum('all'); setSelectedGroupId(''); }}><SelectTrigger className="w-[100px]"><SelectValue placeholder="학년" /></SelectTrigger><SelectContent>{grades.map(g => <SelectItem key={g} value={g}>{g}학년</SelectItem>)}</SelectContent></Select>
-                        <Select value={selectedClassNum} onValueChange={setSelectedClassNum} disabled={!selectedGrade}><SelectTrigger className="w-[100px]"><SelectValue placeholder="반" /></SelectTrigger><SelectContent><SelectItem value="all">전체</SelectItem>{classNumsByGrade[selectedGrade]?.map(c => <SelectItem key={c} value={c}>{c}반</SelectItem>)}</SelectContent></Select>
-                        <Select value={selectedGroupId} onValueChange={v => { setSelectedGroupId(v); setSelectedGrade(''); }}><SelectTrigger className="w-[180px]"><SelectValue placeholder="그룹 선택" /></SelectTrigger><SelectContent>{allTeamGroups.concat(sportsClubs as any).map((g: any) => <SelectItem key={g.id} value={g.id}>{g.description || g.name}</SelectItem>)}</SelectContent></Select>
-                        <Popover><PopoverTrigger asChild><Button variant="outline" className="w-[180px] justify-start"><CalendarIcon className="mr-2 h-4 w-4" />{batchRecordDate ? format(batchRecordDate, "PPP") : "날짜"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={batchRecordDate} onSelect={setBatchRecordDate} initialFocus /></PopoverContent></Popover>
-                        <Select value={batchRecordItem} onValueChange={v => { setBatchRecordItem(v); setShowVideo(false); setShowGradeTable(false); }}><SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger><SelectContent>{activeItems.map(i => <SelectItem key={i.id} value={i.name}>{i.name}</SelectItem>)}</SelectContent></Select>
-                        <Button variant="outline" onClick={handleDownloadTemplate} disabled={studentsForBatch.length === 0} title="엑셀 템플릿 다운로드">
-                            <Download className="mr-2 h-4 w-4" />
-                            템플릿
+             <Card className="bg-transparent shadow-none border-none w-full max-w-full">
+                <CardHeader className="px-0 sm:px-6 py-1 sm:py-3">
+                    <CardTitle className="text-base sm:text-xl font-bold truncate">학급/팀별 측정 기록</CardTitle>
+                    <CardDescription className="text-[11px] sm:text-xs text-muted-foreground truncate">아이들의 이전 기록을 참고하며 한 명씩 실시간으로 안전하게 저장하세요.</CardDescription>
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2">
+                        <Select value={selectedGrade} onValueChange={v => { setSelectedGrade(v); setSelectedClassNum('all'); setSelectedGroupId(''); }}><SelectTrigger className="w-[68px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue placeholder="학년" /></SelectTrigger><SelectContent>{grades.map(g => <SelectItem key={g} value={g}>{g}학년</SelectItem>)}</SelectContent></Select>
+                        <Select value={selectedClassNum} onValueChange={setSelectedClassNum} disabled={!selectedGrade}><SelectTrigger className="w-[58px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue placeholder="반" /></SelectTrigger><SelectContent><SelectItem value="all">전체</SelectItem>{classNumsByGrade[selectedGrade]?.map(c => <SelectItem key={c} value={c}>{c}반</SelectItem>)}</SelectContent></Select>
+                        <Select value={selectedGroupId} onValueChange={v => { setSelectedGroupId(v); setSelectedGrade(''); }}><SelectTrigger className="w-[100px] sm:w-[120px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue placeholder="그룹 선택" /></SelectTrigger><SelectContent>{allTeamGroups.concat(sportsClubs as any).map((g: any) => <SelectItem key={g.id} value={g.id}>{g.description || g.name}</SelectItem>)}</SelectContent></Select>
+                        <Popover><PopoverTrigger asChild><Button variant="outline" className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs justify-start w-[95px] sm:w-[110px]"><CalendarIcon className="mr-1 h-3.5 w-3.5 flex-shrink-0" />{batchRecordDate ? format(batchRecordDate, "MM/dd") : "날짜"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={batchRecordDate} onSelect={setBatchRecordDate} initialFocus /></PopoverContent></Popover>
+                        <Select value={batchRecordItem} onValueChange={v => { setBatchRecordItem(v); setShowVideo(false); setShowGradeTable(false); }}><SelectTrigger className="w-[110px] sm:w-[130px] h-7 sm:h-8 text-[11px] sm:text-xs"><SelectValue /></SelectTrigger><SelectContent>{activeItems.map(i => <SelectItem key={i.id} value={i.name}>{i.name}</SelectItem>)}</SelectContent></Select>
+                        <Button variant="outline" size="sm" onClick={handleDownloadTemplate} disabled={studentsForBatch.length === 0} title="엑셀 템플릿 다운로드" className="h-7 sm:h-8 px-2">
+                            <Download className="h-3.5 w-3.5" />
                         </Button>
-                        <Button onClick={handleSaveBatchRecords} disabled={isBatchSubmitting || studentsForBatch.length === 0} className="ml-auto font-bold">{isBatchSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}전체 저장</Button>
+                        <Button size="sm" onClick={handleSaveBatchRecords} disabled={isBatchSubmitting || studentsForBatch.length === 0} className="ml-auto font-bold h-7 sm:h-8 text-xs px-2.5">{isBatchSubmitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}전체 저장</Button>
                     </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="px-0 sm:px-6 py-1 sm:py-3 space-y-2 sm:space-y-4">
                     {selectedItemForBatch && (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                             {selectedItemForBatch.videoUrl && (
-                                <Button variant="outline" size="sm" onClick={() => setShowVideo(!showVideo)}>
-                                    <Youtube className="mr-2 h-4 w-4 text-red-600" />
+                                <Button variant="outline" size="sm" onClick={() => setShowVideo(!showVideo)} className="h-7 text-xs px-2">
+                                    <Youtube className="mr-1.5 h-3.5 w-3.5 text-red-600" />
                                     {showVideo ? '영상 닫기' : '측정 예시 영상'}
                                 </Button>
                             )}
                             {selectedItemForBatch.isPaps && (
-                                <Button variant="outline" size="sm" onClick={() => setShowGradeTable(!showGradeTable)}>
-                                    <ClipboardList className="mr-2 h-4 w-4 text-primary" />
+                                <Button variant="outline" size="sm" onClick={() => setShowGradeTable(!showGradeTable)} className="h-7 text-xs px-2">
+                                    <ClipboardList className="mr-1.5 h-3.5 w-3.5 text-primary" />
                                     {showGradeTable ? '기준표 닫기' : '등급 기준표'}
                                 </Button>
                             )}
@@ -421,20 +420,22 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                     <div className="border rounded-md overflow-x-auto">
                         <Table>
                             <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-16">사진</TableHead>
-                                    <TableHead className="w-32">이름</TableHead>
-                                    <TableHead className="w-24 text-blue-600 font-bold">이전 기록</TableHead>
+                                <TableRow className="h-8">
+                                    <TableHead className="w-14 sm:w-16 text-center p-1 text-[11px] sm:text-xs">사진</TableHead>
+                                    <TableHead className="p-1 text-[11px] sm:text-xs whitespace-nowrap">이름</TableHead>
+                                    <TableHead className="w-16 sm:w-24 text-center p-1 text-blue-600 font-bold text-[11px] sm:text-xs whitespace-nowrap">이전 기록</TableHead>
                                     {selectedItemForBatch?.isCompound ? (
                                         <>
-                                            <TableHead className="w-24 text-center">키(cm)</TableHead>
-                                            <TableHead className="w-24 text-center">몸무게(kg)</TableHead>
-                                            <TableHead className="w-20 text-center">BMI</TableHead>
+                                            <TableHead className="w-14 sm:w-20 text-center p-1 text-[11px] sm:text-xs">키(cm)</TableHead>
+                                            <TableHead className="w-14 sm:w-20 text-center p-1 text-[11px] sm:text-xs">몸무게(kg)</TableHead>
+                                            <TableHead className="w-12 sm:w-16 text-center p-1 text-[11px] sm:text-xs">BMI</TableHead>
                                         </>
                                     ) : (
-                                        <TableHead className="text-center">현재 기록({selectedItemForBatch?.unit})</TableHead>
+                                        <TableHead className="w-16 sm:w-24 text-center p-1 text-[11px] sm:text-xs whitespace-nowrap">
+                                            현재 기록{selectedItemForBatch?.unit ? `(${selectedItemForBatch.unit})` : ''}
+                                        </TableHead>
                                     )}
-                                    <TableHead className="w-24 text-right">작업</TableHead>
+                                    <TableHead className="w-9 sm:w-16 text-center p-1 text-[11px] sm:text-xs">작업</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -443,29 +444,43 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                     const current = batchRecords[s.id] || {};
                                     const isSaved = savedIds.has(s.id);
                                     return (
-                                        <TableRow key={s.id} className={cn(isSaved && "bg-green-50/50 transition-colors")}>
-                                            <TableCell><Avatar className="w-10 h-10"><AvatarImage src={s.photoUrl} /><AvatarFallback>{s.name[0]}</AvatarFallback></Avatar></TableCell>
-                                            <TableCell><div className="flex flex-col"><span className="font-bold">{s.name}</span><span className="text-[10px] text-muted-foreground">{s.grade}-{s.classNum} {s.studentNum}번</span></div></TableCell>
-                                            <TableCell className="text-xs font-black text-blue-600 italic">{prev ? `${prev.value}${selectedItemForBatch?.unit || ''}` : '-'}</TableCell>
+                                        <TableRow key={s.id} className={cn(isSaved && "bg-green-50/50 transition-colors", "h-14 sm:h-16")}>
+                                            <TableCell className="p-1 text-center">
+                                                <Avatar className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg shadow-sm border border-border/50">
+                                                    <AvatarImage src={s.photoUrl} className="object-cover" />
+                                                    <AvatarFallback className="text-xs font-bold bg-muted">{s.name[0]}</AvatarFallback>
+                                                </Avatar>
+                                            </TableCell>
+                                            <TableCell className="p-1 whitespace-nowrap">
+                                                <div className="flex flex-col justify-center">
+                                                    <span className="font-bold text-xs sm:text-sm leading-tight whitespace-nowrap">{s.name}</span>
+                                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap leading-tight mt-0.5">{s.grade}-{s.classNum} {s.studentNum}번</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="p-1 text-center text-xs sm:text-sm font-black text-blue-600 italic whitespace-nowrap">
+                                                {prev ? `${prev.value}${selectedItemForBatch?.unit || ''}` : '-'}
+                                            </TableCell>
                                             {selectedItemForBatch?.isCompound ? (
                                                 <>
-                                                    <TableCell><Input type="number" placeholder="키" value={current.height || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, height: e.target.value}})} className="text-center h-9" /></TableCell>
-                                                    <TableCell><Input type="number" placeholder="몸무게" value={current.weight || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, weight: e.target.value}})} className="text-center h-9" /></TableCell>
-                                                    <TableCell className="text-center font-bold text-primary text-sm">{calculateBmi(current.height, current.weight)}</TableCell>
+                                                    <TableCell className="p-1"><Input type="number" placeholder="키" value={current.height || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, height: e.target.value}})} className="text-center h-8 text-xs px-1" /></TableCell>
+                                                    <TableCell className="p-1"><Input type="number" placeholder="몸무게" value={current.weight || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, weight: e.target.value}})} className="text-center h-8 text-xs px-1" /></TableCell>
+                                                    <TableCell className="p-1 text-center font-bold text-primary text-xs">{calculateBmi(current.height, current.weight)}</TableCell>
                                                 </>
                                             ) : (
-                                                <TableCell><Input type="number" className="text-center max-w-[120px] mx-auto h-9" value={current.value || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, value: e.target.value}})} /></TableCell>
+                                                <TableCell className="p-1 text-center">
+                                                    <Input type="number" className="text-center w-full max-w-[76px] sm:max-w-[100px] mx-auto h-8 text-xs px-1 font-semibold" value={current.value || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, value: e.target.value}})} />
+                                                </TableCell>
                                             )}
-                                            <TableCell className="text-right">
-                                                <Button variant={isSaved ? "ghost" : "outline"} size="sm" onClick={() => handleIndividualSave(s.id)} disabled={savingId === s.id} className={cn("h-8 px-2 transition-all", isSaved && "text-green-600 font-bold")}>
+                                            <TableCell className="p-1 text-center">
+                                                <Button variant={isSaved ? "ghost" : "outline"} size="sm" onClick={() => handleIndividualSave(s.id)} disabled={savingId === s.id} className={cn("h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2 mx-auto transition-all", isSaved && "text-green-600 font-bold")}>
                                                     {savingId === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : isSaved ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                                                    <span className="ml-1 hidden sm:inline">{isSaved ? '저장됨' : '저장'}</span>
+                                                    <span className="ml-1 hidden sm:inline text-xs">{isSaved ? '저장됨' : '저장'}</span>
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
                                     );
                                 })}
-                                {!studentsForBatch.length && <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">상단 필터를 통해 학급 또는 팀을 선택해주세요.</TableCell></TableRow>}
+                                {!studentsForBatch.length && <TableRow><TableCell colSpan={7} className="h-20 text-center text-xs text-muted-foreground">상단 필터를 통해 학급 또는 팀을 선택해주세요.</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>
