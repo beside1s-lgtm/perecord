@@ -330,8 +330,8 @@ export default function MeasurementManagement({ items, onItemsUpdate }: Measurem
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex w-full flex-wrap items-center gap-2">
-            <AddPapsItemDialog onAddItem={handleAddItem} currentItems={items} />
-            <AddSportDialog onAddItem={handleAddItem} allItems={items} />
+            <AddPapsItemDialog onAddItem={handleAddItem} currentItems={items} onRefresh={refreshItems} />
+            <AddSportDialog onAddItem={handleAddItem} allItems={items} onRefresh={refreshItems} />
             <AddCustomItemDialog onAddItem={handleAddItem} />
 
             <div className="flex flex-col items-end gap-2 ml-auto">
@@ -585,59 +585,119 @@ function EditItemDialog({ item, onUpdate }: { item: MeasurementItem, onUpdate: (
     );
 }
 
-function AddPapsItemDialog({ onAddItem, currentItems }: { onAddItem: (item: Omit<MeasurementItem, 'id'>) => Promise<void>, currentItems: MeasurementItem[] }) {
-    const [selectedItemName, setSelectedItemName] = useState('');
+function AddPapsItemDialog({ onAddItem, currentItems, onRefresh }: { onAddItem: (item: Omit<MeasurementItem, 'id'>) => Promise<void>, currentItems: MeasurementItem[], onRefresh: () => Promise<void> }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [open, setOpen] = useState(false);
     const { toast } = useToast();
+    const { school } = useAuth();
 
-    const availablePapsItems = Object.keys(papsStandards).filter(
-        papsItemName => !currentItems.some(item => item.name === papsItemName && !item.isDeactivated)
+    const allPapsNames = Object.keys(papsStandards);
+
+    // 활성화된 종목 이름 Set
+    const activeNames = new Set(
+        currentItems.filter(i => i.isPaps && !i.isDeactivated && !i.isArchived).map(i => i.name)
+    );
+    // 비활성화(deactivated/archived) 종목 맵
+    const deactivatedMap = new Map(
+        currentItems.filter(i => i.isPaps && (i.isDeactivated || i.isArchived)).map(i => [i.name, i])
     );
 
-    const handleSubmit = async () => {
-        if (!selectedItemName) return;
-        setIsSubmitting(true);
-        const standard = papsStandards[selectedItemName as keyof typeof papsStandards];
-        const newItem: Omit<MeasurementItem, 'id'> = {
-            name: selectedItemName,
-            unit: standard.unit,
-            recordType: standard.type,
-            isPaps: true,
-            isCompound: standard.type === 'compound',
-            category: 'PAPS',
-        };
-        await onAddItem(newItem);
-        setSelectedItemName('');
-        setIsSubmitting(false);
-        document.getElementById('add-paps-item-dialog-close')?.click();
+    const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+    const handleOpen = (isOpen: boolean) => {
+        if (isOpen) {
+            const initial: Record<string, boolean> = {};
+            allPapsNames.forEach(name => { initial[name] = activeNames.has(name); });
+            setChecked(initial);
+        }
+        setOpen(isOpen);
     };
 
+    const handleToggle = (name: string, isChecked: boolean) => {
+        if (activeNames.has(name)) return;
+        setChecked(prev => ({ ...prev, [name]: isChecked }));
+    };
+
+    const handleSubmit = async () => {
+        if (!school) return;
+        setIsSubmitting(true);
+        try {
+            const tasks: Promise<void>[] = [];
+            for (const name of allPapsNames) {
+                if (!activeNames.has(name) && checked[name]) {
+                    const existingItem = deactivatedMap.get(name);
+                    if (existingItem) {
+                        tasks.push(deactivateItem(school, existingItem.id, false));
+                    } else {
+                        const standard = papsStandards[name as keyof typeof papsStandards];
+                        tasks.push(onAddItem({
+                            name,
+                            unit: standard.unit,
+                            recordType: standard.type,
+                            isPaps: true,
+                            isCompound: standard.type === 'compound',
+                            category: 'PAPS',
+                        }));
+                    }
+                }
+            }
+            if (tasks.length > 0) {
+                await Promise.all(tasks);
+                await onRefresh();
+                toast({ title: 'PAPS 종목 활성화 완료' });
+            }
+            setOpen(false);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const hasNewSelection = allPapsNames.some(name => !activeNames.has(name) && checked[name]);
+
     return (
-        <Dialog>
+        <Dialog open={open} onOpenChange={handleOpen}>
             <DialogTrigger asChild><Button variant="outline"><Plus className="mr-2 h-4 w-4" /> PAPS</Button></DialogTrigger>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>PAPS 종목 추가/활성화</DialogTitle>
-                    <DialogDescription>비활성화된 PAPS 종목을 다시 활성 목록으로 가져옵니다.</DialogDescription>
+                    <DialogDescription>체크된 종목은 활성 목록에 포함됩니다. 비활성화된 종목을 체크하면 다시 활성화됩니다.</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <Label htmlFor="paps-item">종목 선택</Label>
-                    <Select onValueChange={setSelectedItemName} value={selectedItemName}>
-                        <SelectTrigger id="paps-item"><SelectValue placeholder="PAPS 종목 선택" /></SelectTrigger>
-                        <SelectContent>
-                            {availablePapsItems.length > 0 ? (
-                                availablePapsItems.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)
-                            ) : (
-                                <SelectItem value="none" disabled>모든 PAPS 종목이 활성화되어 있습니다.</SelectItem>
-                            )}
-                        </SelectContent>
-                    </Select>
+                <div className="py-3 space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {allPapsNames.map(name => {
+                        const isActive = activeNames.has(name);
+                        const isCheckedNow = checked[name] ?? isActive;
+                        return (
+                            <div key={name} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
+                                isActive
+                                    ? 'bg-primary/10 border-primary/30 opacity-60'
+                                    : isCheckedNow
+                                    ? 'bg-muted border-primary/50'
+                                    : 'bg-background border-border'
+                            }`}>
+                                <Checkbox
+                                    id={`paps-old-${name}`}
+                                    checked={isCheckedNow}
+                                    onCheckedChange={(c) => handleToggle(name, !!c)}
+                                    disabled={isActive}
+                                />
+                                <Label htmlFor={`paps-old-${name}`} className={`flex-1 text-sm font-medium cursor-pointer ${isActive ? 'text-muted-foreground' : ''}`}>
+                                    {name}
+                                </Label>
+                                {isActive && (
+                                    <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">활성</span>
+                                )}
+                                {!isActive && deactivatedMap.has(name) && (
+                                    <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">비활성</span>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
                 <DialogFooter>
-                    <DialogClose asChild><Button id="add-paps-item-dialog-close" variant="outline">취소</Button></DialogClose>
-                    <Button onClick={handleSubmit} disabled={availablePapsItems.length === 0 || isSubmitting}>
-                       {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                       활성화하기
+                    <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
+                    <Button onClick={handleSubmit} disabled={isSubmitting || !hasNewSelection}>
+                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        활성화 적용
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -645,9 +705,11 @@ function AddPapsItemDialog({ onAddItem, currentItems }: { onAddItem: (item: Omit
     );
 }
 
-function AddSportDialog({ onAddItem, allItems }: { onAddItem: (item: Omit<MeasurementItem, 'id'>) => Promise<void>, allItems: MeasurementItem[] }) {
+
+function AddSportDialog({ onAddItem, allItems, onRefresh }: { onAddItem: (item: Omit<MeasurementItem, 'id'>) => Promise<void>, allItems: MeasurementItem[], onRefresh: () => Promise<void> }) {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const { toast } = useToast();
+    const { school } = useAuth();
 
     const baseCategories = ['배구', '농구', '야구', '축구', '피구'];
     const currentCategories = [...new Set(allItems.filter(i => !i.isPaps && i.category !== '기타').map(i => i.category as string))];
@@ -657,6 +719,13 @@ function AddSportDialog({ onAddItem, allItems }: { onAddItem: (item: Omit<Measur
         if (!selectedCategory) return [];
         return allItems.filter(i => i.category === selectedCategory && i.isDeactivated);
     }, [selectedCategory, allItems]);
+
+    const handleReactivate = async (item: MeasurementItem) => {
+        if (!school) return;
+        await deactivateItem(school, item.id, false);
+        await onRefresh();
+        toast({ title: `${item.name} 활성화 완료` });
+    };
 
     return (
         <Dialog onOpenChange={(open) => !open && setSelectedCategory(null)}>
@@ -690,7 +759,7 @@ function AddSportDialog({ onAddItem, allItems }: { onAddItem: (item: Omit<Measur
                                     <div className="space-y-1">
                                         {deactivatedInCategory.length > 0 ? (
                                             deactivatedInCategory.map(item => (
-                                                <Button key={item.id} variant="secondary" className="w-full justify-start text-sm" onClick={() => onAddItem({ ...item })}>
+                                                <Button key={item.id} variant="secondary" className="w-full justify-start text-sm" onClick={() => handleReactivate(item)}>
                                                     <Plus className="h-3 w-3 mr-2" /> {item.name} ({item.unit})
                                                 </Button>
                                             ))

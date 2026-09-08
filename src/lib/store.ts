@@ -323,8 +323,8 @@ export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pic
   try {
     let finalRecord: MeasurementRecord;
 
-    // 만약 이미 문서 ID가 명시되어 있다면 getDocs 쿼리 없이 즉시 업데이트/생성
-    if (record.id) {
+    // 만약 이미 실제 Firestore 문서 ID가 명시되어 있다면 getDocs 쿼리 없이 1회 setDoc(merge)로 즉시 저장
+    if (record.id && !record.id.startsWith('temp_')) {
       const docRef = doc(recordsRef, record.id);
       const updates: any = { value: record.value };
       if (record.height !== undefined) updates.height = record.height;
@@ -338,7 +338,7 @@ export const addOrUpdateRecord = async (record: Partial<MeasurementRecord> & Pic
       Object.entries(updates).forEach(([k, v]) => { if (v !== undefined) cleanObj[k] = v; });
 
       await setDoc(docRef, cleanObj, { merge: true });
-      finalRecord = { ...record, id: docRef.id } as MeasurementRecord;
+      finalRecord = { ...cleanObj, ...record, id: docRef.id } as MeasurementRecord;
       return finalRecord;
     }
 

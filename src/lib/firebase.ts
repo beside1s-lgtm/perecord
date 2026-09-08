@@ -3,7 +3,13 @@
 
 import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, type User, Auth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager, 
+  getFirestore, 
+  Firestore 
+} from 'firebase/firestore';
 
 // 환경 변수에서 Firebase 설정값을 가져옵니다.
 // NEXT_PUBLIC_ 접두사가 붙어야 브라우저에서 안전하게 읽을 수 있습니다.
@@ -32,7 +38,19 @@ if (typeof window !== 'undefined') {
   
   try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-    db = getFirestore(app);
+    
+    // Firestore IndexedDB 영구 캐시 설정: 첫 방문 이후 모든 데이터를 로컬에서 밀리초 단위로 초고속 로드
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+    } catch {
+      // 이미 초기화된 인스턴스가 존재할 경우
+      db = getFirestore(app);
+    }
+
     auth = getAuth(app);
     
     // 아이폰 사파리 및 모바일 브라우저 호환성을 위해 인증 지속성을 명시적으로 Local로 설정합니다.

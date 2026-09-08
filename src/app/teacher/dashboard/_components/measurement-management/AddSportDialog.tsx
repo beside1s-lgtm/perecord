@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Swords, ChevronRight, Loader2 } from 'lucide-react';
-import { addItem } from '@/lib/store';
+import { addItem, deactivateItem } from '@/lib/store';
 import type { MeasurementItem, RecordType } from '@/lib/types';
 
 export function AddSportDialog({ onAdd, allItems, school }: { onAdd: () => Promise<void>, allItems: MeasurementItem[], school: string }) {
@@ -32,7 +32,8 @@ export function AddSportDialog({ onAdd, allItems, school }: { onAdd: () => Promi
 
   const handleReactivate = async (item: MeasurementItem) => {
     if (!school) return;
-    await addItem(school, { ...item });
+    // isDeactivated=false 로 재활성화 (중복 생성 방지)
+    await deactivateItem(school, item.id, false);
     await onAdd();
   };
 

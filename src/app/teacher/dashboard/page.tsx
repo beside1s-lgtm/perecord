@@ -67,39 +67,77 @@ export default function TeacherDashboardPage() {
     statistics: ItemStatistics[];
   }>({ students: [], items: [], records: [], teams: [], clubs: [], statistics: [] });
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("measurement");
+  const [activeCategory, setActiveCategory] = useState<string>("measurement");
+  const [activeFeature, setActiveFeature] = useState<string>("input");
   const router = useRouter();
 
-  // 캐시 키 설정
-  const getCacheKey = useCallback(() => `pe_dash_cache_${school}`, [school]);
+  // URL 쿼리 파라미터가 있을 경우 초기 동기화
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      const subtab = params.get('subtab');
+      if (tab && ['measurement', 'theory', 'competition', 'data'].includes(tab)) {
+        setActiveCategory(tab);
+        if (subtab) setActiveFeature(subtab);
+      }
+    }
+  }, []);
+
+  // 브라우저 영구 캐시 키 (브라우저를 닫았다가 다시 열어도 0초 즉시 로딩)
+  const getCacheKey = useCallback(() => `pe_dash_local_cache_${school}`, [school]);
 
   const load = useCallback(async (force = false) => {
     if (!school) return;
     
-    // 1. 캐시 확인 (강제 로드가 아닐 때)
+    // 1. 브라우저 영구 캐시 확인 (Stale-While-Revalidate: 캐시로 즉각 0.05초 렌더링 후 백그라운드 갱신)
     if (!force) {
-      const cachedData = sessionStorage.getItem(getCacheKey());
-      if (cachedData) {
-        try {
-          const parsed = JSON.parse(cachedData);
-          setData(parsed);
-          setIsLoading(false);
-          // 캐시 히트 후 백그라운드에서 records와 students(전체) 최신화
-          Promise.all([getRecords(school), getStudents(school)]).then(([records, students]) => {
-            setData(prev => ({ ...prev, records, students }));
-          }).catch(() => {});
-          return;
-        } catch (e) {
-          sessionStorage.removeItem(getCacheKey());
+      try {
+        const cachedRaw = localStorage.getItem(getCacheKey());
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed && Array.isArray(parsed.students)) {
+            setData(parsed);
+            setIsLoading(false);
+            // 캐시 데이터로 즉각 화면을 띄운 뒤, 백그라운드에서 조용히 최신 데이터 갱신
+            Promise.all([
+              getStudents(school),
+              getItems(school),
+              getRecords(school),
+              getTeamGroups(school),
+              getSportsClubs(school),
+              getStatistics(school)
+            ]).then(([students, items, records, teams, clubs, statistics]) => {
+              const fullData = { students, items, records, teams, clubs, statistics };
+              setData(fullData);
+              try {
+                // 용량 초과 방지를 위해 캐시용 경량 학생 데이터 구성
+                const lightStudents = students.map(s => ({
+                  id: s.id, name: s.name, grade: s.grade, classNum: s.classNum,
+                  studentNum: s.studentNum, gender: s.gender, personalCode: s.personalCode,
+                  school: s.school, photoUrl: s.photoUrl,
+                }));
+                localStorage.setItem(getCacheKey(), JSON.stringify({
+                  ...fullData,
+                  records: [], // records는 IndexedDB(Firestore persistentLocalCache)에 영구 보존되므로 localStorage 용량 절약
+                  students: lightStudents
+                }));
+              } catch (e) {
+                // localStorage 용량 제한 도달 시 안전 무시
+              }
+            }).catch(() => {});
+            return;
+          }
         }
+      } catch (e) {
+        localStorage.removeItem(getCacheKey());
       }
     }
 
-    // 2. 서버에서 데이터 가져오기 (signIn을 한 번만 호출하여 중복 오버헤드 제거)
+    // 2. 캐시가 없는 최초 1회 방문 시: 필터 및 필수 기초 데이터 로딩
     if (!force) setIsLoading(true);
     try {
-      await signIn(); // 한 번만 인증하여 아래 Promise.all의 각 함수가 이미 인증된 상태로 실행됨
-      // 필터 및 화면 레이아웃 구성용 필수 기초 데이터만 1차로 로딩
+      await signIn();
       const [students, items, teams, clubs] = await Promise.all([
         getStudents(school), 
         getItems(school), 
@@ -118,7 +156,7 @@ export default function TeacherDashboardPage() {
       
       setData(initialData);
       
-      // 기초 데이터 로드 완료 즉시 스켈레톤 해제하여 대시보드 표시
+      // 기초 데이터 로드 완료 즉시 스켈레톤 해제하여 대시보드 표시 (지연 시간 최소화)
       if (!force) setIsLoading(false);
 
       // 무거운 기록 데이터와 통계 데이터는 백그라운드에서 병렬 로드
@@ -129,20 +167,16 @@ export default function TeacherDashboardPage() {
         setData(prev => {
           const updated = { ...prev, records, statistics };
           
-          // 백그라운드 로드가 완료된 후 캐시 갱신 (records 및 건강기록부 무거운 필드 제외)
           try {
             const lightStudents = updated.students.map(s => ({
               id: s.id, name: s.name, grade: s.grade, classNum: s.classNum,
               studentNum: s.studentNum, gender: s.gender, personalCode: s.personalCode,
-              school: s.school, guardianName: s.guardianName,
-              residentRegistrationNumber: s.residentRegistrationNumber,
-              bloodType: s.bloodType, officialSchoolName: s.officialSchoolName,
-              schoolHistory: s.schoolHistory,
+              school: s.school, photoUrl: s.photoUrl,
             }));
             const cacheData = { ...updated, records: [], students: lightStudents };
-            sessionStorage.setItem(getCacheKey(), JSON.stringify(cacheData));
+            localStorage.setItem(getCacheKey(), JSON.stringify(cacheData));
           } catch (e) {
-            sessionStorage.removeItem(getCacheKey());
+            // 저장 실패 시 무시
           }
 
           return updated;
@@ -165,20 +199,15 @@ export default function TeacherDashboardPage() {
   }, [school, load]);
 
   useEffect(() => {
-     if (activeTab) {
+     if (activeCategory) {
        const url = new URL(window.location.href);
-       url.searchParams.set('tab', activeTab);
+       url.searchParams.set('tab', activeCategory);
+       if (activeFeature) {
+         url.searchParams.set('subtab', activeFeature);
+       }
        router.replace(url.pathname + url.search, { scroll: false });
      }
-  }, [activeTab, router]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab) setActiveTab(tab);
-    }
-  }, []);
+  }, [activeCategory, activeFeature, router]);
 
   // 로컬 상태 즉시 갱신 핸들러 (불필요한 전체 네트워크 리로드 방지)
   const handleRecordUpdate = useCallback((recordsOrId?: MeasurementRecord[] | string, action: 'update' | 'delete' = 'update') => {
@@ -244,96 +273,79 @@ export default function TeacherDashboardPage() {
     return (
       <AnimatePresence mode="wait">
         <motion.div
-           key={activeTab}
+           key={`${activeCategory}-${activeFeature}`}
            variants={tabVariants}
            initial="initial"
            animate="animate"
            exit="exit"
            className="w-full"
         >
-          <TabsContent value="measurement" className="space-y-2 sm:space-y-6 mt-0">
-            <Tabs defaultValue="input">
-              <TabsList className="grid w-full grid-cols-4 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
-                <TabsTrigger value="input" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">입력</TabsTrigger>
-                <TabsTrigger value="analysis" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">분석</TabsTrigger>
-                <TabsTrigger value="browser" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">조회</TabsTrigger>
-                <TabsTrigger value="ranking" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">순위</TabsTrigger>
-              </TabsList>
-              <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>}>
-                <TabsContent value="input">
+          <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-primary" /></div>}>
+            {/* 1. 측정 & 분석 카테고리 */}
+            {activeCategory === "measurement" && (
+              <>
+                {activeFeature === "input" && (
                   <RecordInput allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={handleRecordUpdate} allTeamGroups={data.teams} sportsClubs={data.clubs} />
-                </TabsContent>
-                <TabsContent value="analysis">
+                )}
+                {activeFeature === "analysis" && (
                   <ClassAnalytics allStudents={data.students} allItems={data.items} allRecords={data.records} onRecordUpdate={handleRecordUpdate} sportsClubs={data.clubs} />
-                </TabsContent>
-                <TabsContent value="browser">
+                )}
+                {activeFeature === "browser" && (
                   <RecordBrowser allStudents={data.students} allItems={data.items} allRecords={data.records} sportsClubs={data.clubs} />
-                </TabsContent>
-                <TabsContent value="ranking">
+                )}
+                {activeFeature === "ranking" && (
                   <Ranking allStudents={data.students} allItems={data.items} allRecords={data.records} sportsClubs={data.clubs} />
-                </TabsContent>
-              </Suspense>
-            </Tabs>
-          </TabsContent>
+                )}
+              </>
+            )}
 
-          <TabsContent value="theory" className="mt-0">
-            <TheoryExamManagement allStudents={data.students} sportsClubs={data.clubs} />
-          </TabsContent>
+            {/* 2. 이론 평가 카테고리 */}
+            {activeCategory === "theory" && (
+              <TheoryExamManagement allStudents={data.students} sportsClubs={data.clubs} />
+            )}
 
-          <TabsContent value="competition" className="space-y-2 sm:space-y-6 mt-0">
-            <Tabs defaultValue="tournament">
-              <TabsList className="grid w-full grid-cols-3 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
-                <TabsTrigger value="tournament" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">대회</TabsTrigger>
-                <TabsTrigger value="balancer" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">편성</TabsTrigger>
-                <TabsTrigger value="clubs" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">클럽</TabsTrigger>
-              </TabsList>
-              <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
-                <TabsContent value="tournament">
+            {/* 3. 대회 & 팀 카테고리 */}
+            {activeCategory === "competition" && (
+              <>
+                {activeFeature === "tournament" && (
                   <TournamentManagement onTournamentUpdate={handleTournamentUpdate} allTeamGroups={data.teams} allStudents={data.students} />
-                </TabsContent>
-                <TabsContent value="balancer">
+                )}
+                {activeFeature === "balancer" && (
                   <TeamBalancer allStudents={data.students} allItems={data.items} allRecords={data.records} teamGroups={data.teams} onTeamGroupUpdate={handleTeamGroupUpdate} onTeamGroupDelete={handleTeamGroupDelete} sportsClubs={data.clubs} />
-                </TabsContent>
-                <TabsContent value="clubs">
+                )}
+                {activeFeature === "clubs" && (
                   <SportsClubManagement allStudents={data.students} sportsClubs={data.clubs} onClubUpdate={handleClubUpdate} />
-                </TabsContent>
-              </Suspense>
-            </Tabs>
-          </TabsContent>
+                )}
+              </>
+            )}
 
-          <TabsContent value="data" className="space-y-2 sm:space-y-6 mt-0">
-            <Tabs defaultValue="students">
-              <TabsList className="grid w-full grid-cols-4 mb-2 sm:mb-4 bg-muted/30 p-0.5 sm:p-1 rounded-lg sm:rounded-xl h-8 sm:h-11 border border-border/50">
-                <TabsTrigger value="students" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">명부</TabsTrigger>
-                <TabsTrigger value="items" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">종목</TabsTrigger>
-                <TabsTrigger value="db" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">DB</TabsTrigger>
-                <TabsTrigger value="health-record" className="rounded-md sm:rounded-lg text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">건강기록부</TabsTrigger>
-              </TabsList>
-              <Suspense fallback={<Loader2 className="animate-spin mx-auto" />}>
-                <TabsContent value="students">
+            {/* 4. 데이터 관리 카테고리 */}
+            {activeCategory === "data" && (
+              <>
+                {activeFeature === "students" && (
                   <StudentManagement students={data.students} onStudentsUpdate={() => load(true)} />
-                </TabsContent>
-                <TabsContent value="items">
+                )}
+                {activeFeature === "items" && (
                   <MeasurementManagement items={data.items} onItemsUpdate={(newItems) => setData(prev => ({...prev, items: newItems}))} />
-                </TabsContent>
-                <TabsContent value="db">
+                )}
+                {activeFeature === "db" && (
                   <DatabaseManagement students={data.students} records={data.records} items={data.items} onUpdate={() => load(true)} />
-                </TabsContent>
-                <TabsContent value="health-record">
+                )}
+                {activeFeature === "health-record" && (
                   <HealthRecordManagement students={data.students} items={data.items} records={data.records} onUpdate={() => load(true)} />
-                </TabsContent>
-              </Suspense>
-            </Tabs>
-          </TabsContent>
+                )}
+              </>
+            )}
+          </Suspense>
         </motion.div>
       </AnimatePresence>
     );
-  }, [isLoading, isAuthLoading, data, load, activeTab]);
+  }, [isLoading, isAuthLoading, data, load, activeCategory, activeFeature, handleRecordUpdate, handleTournamentUpdate, handleTeamGroupUpdate, handleTeamGroupDelete, handleClubUpdate]);
 
   if (isAuthLoading) return <DashboardSkeleton />;
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 md:px-10 py-1.5 sm:py-6 space-y-2 sm:space-y-6 pb-32 overflow-x-hidden">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 md:px-10 py-1 sm:py-4 space-y-2 sm:space-y-4 pb-32 overflow-x-hidden">
       <div className="no-print">
         <DashboardHeader 
           onStatsRebuilt={() => load(true)}
@@ -342,37 +354,16 @@ export default function TeacherDashboardPage() {
           records={data.records}
           statistics={data.statistics}
           sportsClubs={data.clubs}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
+          activeFeature={activeFeature}
+          onFeatureChange={setActiveFeature}
         />
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full overflow-x-hidden">
-        <TabsList className="grid grid-cols-4 w-full mb-2 sm:mb-6 h-12 sm:h-18 p-1 sm:p-2 bg-muted/20 border border-border/40 rounded-xl sm:rounded-[2.5rem] backdrop-blur-md shadow-inner gap-1 sm:gap-3 no-print">
-          <TabsTrigger value="measurement" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
-            <LineChart className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-            <span className="hidden sm:inline">측정 & 분석</span>
-            <span className="sm:hidden leading-none">측정</span>
-          </TabsTrigger>
-          <TabsTrigger value="theory" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
-            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-            <span className="hidden sm:inline">이론 평가</span>
-            <span className="sm:hidden leading-none">이론</span>
-          </TabsTrigger>
-          <TabsTrigger value="competition" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
-            <Swords className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-            <span className="hidden sm:inline">대회 & 팀</span>
-            <span className="sm:hidden leading-none">대회</span>
-          </TabsTrigger>
-          <TabsTrigger value="data" className="h-full rounded-[1rem] sm:rounded-[2rem] text-[10px] sm:text-lg font-black tracking-tight flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-2xl transition-all px-1">
-            <Database className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-            <span className="hidden sm:inline">데이터 관리</span>
-            <span className="sm:hidden leading-none">관리</span>
-          </TabsTrigger>
-        </TabsList>
-
-        <Suspense fallback={<DashboardSkeleton />}>
-           {renderTabContent}
-        </Suspense>
-      </Tabs>
+      <div className="w-full">
+        {renderTabContent}
+      </div>
     </div>
   );
 }
