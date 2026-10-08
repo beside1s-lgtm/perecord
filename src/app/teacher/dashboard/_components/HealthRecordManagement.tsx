@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { updateStudent, getSchoolExamInstitutions, saveSchoolExamInstitutions, exportToExcel, getSchoolByName, updateSchoolSetting } from "@/lib/store";
 import type { Student, MeasurementItem, MeasurementRecord, SchoolHistoryEntry, PreSchoolImmunization, PostSchoolImmunization, HealthExam, OtherExam } from "@/lib/types";
-import { getPapsGrade, calculatePapsScore } from "@/lib/paps";
+import { getPapsGrade, calculatePapsScore, getBmiGrade, getBmiStatusText } from "@/lib/paps";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -415,12 +415,11 @@ export function HealthRecordManagement({
       if (matchHeight || matchWeight) {
         const hVal = matchHeight?.value || matchHeight?.height;
         const wVal = matchWeight?.value || matchWeight?.weight;
-        let bmiText = "정상체중";
+        let bmiText = "정상";
         if (hVal && wVal) {
           const bmi = wVal / ((hVal / 100) * (hVal / 100));
-          if (bmi < 18.5) bmiText = "저체중";
-          else if (bmi >= 25) bmiText = "비만";
-          else if (bmi >= 23) bmiText = "과체중";
+          const gradeToEvaluate = g.gradeNum || currentStudent.grade || "5";
+          bmiText = getBmiStatusText(gradeToEvaluate, currentStudent.gender, bmi);
         }
 
         result[g.key] = {

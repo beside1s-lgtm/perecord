@@ -45,9 +45,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { papsGradeStandards } from '@/lib/paps';
+import { papsGradeStandards, BMI_EVALUATION_STANDARDS, getBmiGrade, getBmiStatusText } from '@/lib/paps';
 
 interface RecordInputProps {
     allStudents: Student[];
@@ -107,6 +106,7 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
   const [showVideo, setShowVideo] = useState(false);
   const [showGradeTable, setShowGradeTable] = useState(false);
   const [guideTab, setGuideTab] = useState<'side' | 'standards' | 'video'>('side');
+  const [bmiGenderFilter, setBmiGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   
   const [foundStudents, setFoundStudents] = useState<Student[]>([]);
   const [isSelectionDialogOpen, setIsSelectionDialogOpen] = useState(false);
@@ -383,6 +383,119 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
     });
   };
 
+  const isBmiBatchItem = batchRecordItem === '체질량지수(BMI)' || selectedItemForBatch?.name === '체질량지수(BMI)' || selectedItemForBatch?.isCompound;
+
+  const renderBmiStandardsView = (isLarge: boolean = false) => {
+    const currentGrade = selectedGrade || (studentsForBatch[0]?.grade || '5');
+    const gradeNum = parseInt(currentGrade);
+    const activeGradeKey = (!isNaN(gradeNum) && gradeNum >= 4 && gradeNum <= 6) ? String(gradeNum) : '5';
+
+    const renderTableForGender = (gender: '남' | '여') => {
+      const isMale = gender === '남';
+      const title = isMale ? '1. 남학생 BMI 평가 기준표' : '2. 여학생 BMI 평가 기준표';
+      const titleColor = isMale ? 'text-blue-600 dark:text-blue-400' : 'text-pink-600 dark:text-pink-400';
+      const borderAccent = isMale ? 'border-l-blue-500' : 'border-l-pink-500';
+      const activeBg = isMale ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-950 dark:text-blue-100 font-bold' : 'bg-pink-50/80 dark:bg-pink-950/40 text-pink-950 dark:text-pink-100 font-bold';
+      const standardsObj = BMI_EVALUATION_STANDARDS[gender];
+      const gradesToDisplay = ['4', '5', '6'];
+
+      return (
+        <div className="space-y-1 mb-2.5">
+          <div className={cn("text-xs font-bold flex items-center justify-between px-1", titleColor)}>
+            <span>{title}</span>
+            <span className="text-[10px] text-muted-foreground font-normal">단위: kg/m²</span>
+          </div>
+          <div className="rounded-md border bg-background/90 overflow-hidden shadow-2xs">
+            <Table className="w-full text-center table-fixed">
+              <TableHeader>
+                <TableRow className="bg-muted/50 h-7">
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 w-[42px] sm:w-[50px] font-bold">학년</TableHead>
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 font-bold text-sky-600">마름(이하)</TableHead>
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 font-bold text-emerald-600">정상</TableHead>
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 font-bold text-amber-600">과체중</TableHead>
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 font-bold text-orange-600">경도비만</TableHead>
+                  <TableHead className="text-center h-7 text-[10px] sm:text-[11px] p-0.5 font-bold text-rose-600">고도비만(이상)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {gradesToDisplay.map(g => {
+                  const s = standardsObj[g];
+                  const isCurrent = g === activeGradeKey;
+                  return (
+                    <TableRow 
+                      key={g} 
+                      className={cn(
+                        "h-7 transition-colors hover:bg-muted/30", 
+                        isCurrent && cn(activeBg, "border-l-4", borderAccent)
+                      )}
+                    >
+                      <TableCell className={cn("text-center p-0.5 text-[10px] sm:text-[11px] font-bold", isCurrent && titleColor)}>
+                        {g}학년{isCurrent && <span className="text-[9px] ml-0.5 font-normal">(선택)</span>}
+                      </TableCell>
+                      <TableCell className="p-0.5 text-[10px] sm:text-[11px] font-medium whitespace-nowrap">{s.leanMax} 이하</TableCell>
+                      <TableCell className="p-0.5 text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">{s.normalMin} ~ {s.normalMax}</TableCell>
+                      <TableCell className="p-0.5 text-[10px] sm:text-[11px] font-medium text-amber-700 dark:text-amber-400 whitespace-nowrap">{s.overweightMin} ~ {s.overweightMax}</TableCell>
+                      <TableCell className="p-0.5 text-[10px] sm:text-[11px] font-medium text-orange-700 dark:text-orange-400 whitespace-nowrap">{s.mildObesityMin} ~ {s.mildObesityMax}</TableCell>
+                      <TableCell className="p-0.5 text-[10px] sm:text-[11px] font-medium text-rose-700 dark:text-rose-400 whitespace-nowrap">{s.severeObesityMin} 이상</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-2">
+        {/* 상단 성별 필터 탭 */}
+        <div className="flex items-center justify-between gap-1 flex-wrap">
+          <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/50">
+            <Button
+              type="button"
+              variant={bmiGenderFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-6 text-[10px] font-bold px-2 rounded shadow-2xs"
+              onClick={() => setBmiGenderFilter('all')}
+            >
+              전체
+            </Button>
+            <Button
+              type="button"
+              variant={bmiGenderFilter === 'male' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn("h-6 text-[10px] font-bold px-2 rounded", bmiGenderFilter !== 'male' && "text-blue-600")}
+              onClick={() => setBmiGenderFilter('male')}
+            >
+              남학생
+            </Button>
+            <Button
+              type="button"
+              variant={bmiGenderFilter === 'female' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn("h-6 text-[10px] font-bold px-2 rounded", bmiGenderFilter !== 'female' && "text-pink-600")}
+              onClick={() => setBmiGenderFilter('female')}
+            >
+              여학생
+            </Button>
+          </div>
+          <span className="text-[10px] text-muted-foreground font-medium">선택 학년: <strong className="text-foreground">{activeGradeKey}학년</strong></span>
+        </div>
+
+        {/* 안내 문구 */}
+        <div className="p-1.5 sm:p-2 rounded-lg bg-muted/30 border border-border/50 text-[10px] text-muted-foreground space-y-0.5 leading-relaxed">
+          <p className="font-semibold text-foreground">※ 체질량지수(BMI) = 체중(kg) / [키(m)]² (소수 첫째 자리 반올림 적용)</p>
+          <p>※ PAPS 등급: <span className="text-emerald-600 font-bold">1등급(정상)</span> | <span className="text-amber-600 font-bold">2등급(과체중)</span> | <span className="text-sky-600 font-bold">3등급(마름)</span> | <span className="text-orange-600 font-bold">4등급(경도비만)</span> | <span className="text-rose-600 font-bold">5등급(고도비만)</span></p>
+        </div>
+
+        {/* 기준표 테이블 렌더링 */}
+        {(bmiGenderFilter === 'all' || bmiGenderFilter === 'male') && renderTableForGender('남')}
+        {(bmiGenderFilter === 'all' || bmiGenderFilter === 'female') && renderTableForGender('여')}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Dialog open={isSelectionDialogOpen} onOpenChange={setIsSelectionDialogOpen}>
@@ -493,14 +606,20 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                     )}
                     {showGradeTable && selectedItemForBatch?.isPaps && (
                         <div className="lg:hidden overflow-x-auto rounded-md border bg-muted/30 p-2 animate-in fade-in zoom-in-95 mb-2">
-                            <p className="text-xs font-bold mb-2 px-1 text-primary">{batchRecordItem} 등급 기준 ({selectedGrade || studentsForBatch[0]?.grade || '5'}학년)</p>
-                            <Table>
-                                <TableHeader><TableRow className="bg-background"><TableHead className="text-center h-7 text-[10px] p-1 w-[60px]">성별</TableHead><TableHead className="text-center h-7 text-[10px] p-1">1등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">2등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">3등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">4등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">5등급</TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    <TableRow className="bg-background"><TableCell className="text-center font-bold text-[10px]">남학생</TableCell>{renderGradeRanges('male')}</TableRow>
-                                    <TableRow className="bg-background"><TableCell className="text-center font-bold text-[10px]">여학생</TableCell>{renderGradeRanges('female')}</TableRow>
-                                </TableBody>
-                            </Table>
+                            {isBmiBatchItem ? (
+                              renderBmiStandardsView(false)
+                            ) : (
+                              <>
+                                <p className="text-xs font-bold mb-2 px-1 text-primary">{batchRecordItem} 등급 기준 ({selectedGrade || studentsForBatch[0]?.grade || '5'}학년)</p>
+                                <Table>
+                                    <TableHeader><TableRow className="bg-background"><TableHead className="text-center h-7 text-[10px] p-1 w-[60px]">성별</TableHead><TableHead className="text-center h-7 text-[10px] p-1">1등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">2등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">3등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">4등급</TableHead><TableHead className="text-center h-7 text-[10px] p-1">5등급</TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                        <TableRow className="bg-background"><TableCell className="text-center font-bold text-[10px]">남학생</TableCell>{renderGradeRanges('male')}</TableRow>
+                                        <TableRow className="bg-background"><TableCell className="text-center font-bold text-[10px]">여학생</TableCell>{renderGradeRanges('female')}</TableRow>
+                                    </TableBody>
+                                </Table>
+                              </>
+                            )}
                         </div>
                     )}
 
@@ -518,7 +637,7 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                             <>
                                                 <TableHead className="w-14 sm:w-16 text-center p-1 text-[11px] sm:text-xs">키(cm)</TableHead>
                                                 <TableHead className="w-14 sm:w-16 text-center p-1 text-[11px] sm:text-xs">몸무게(kg)</TableHead>
-                                                <TableHead className="w-12 sm:w-14 text-center p-1 text-[11px] sm:text-xs">BMI</TableHead>
+                                                <TableHead className="w-16 sm:w-20 text-center p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">BMI</TableHead>
                                             </>
                                         ) : (
                                             <TableHead className="w-20 sm:w-24 text-center p-1 text-[11px] sm:text-xs font-bold whitespace-nowrap">
@@ -568,7 +687,31 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                                     <>
                                                         <TableCell className="p-1"><Input type="number" placeholder="키" value={current.height || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, height: e.target.value}})} className="text-center h-8 text-xs px-1" /></TableCell>
                                                         <TableCell className="p-1"><Input type="number" placeholder="몸무게" value={current.weight || ''} onChange={e => setBatchRecords({...batchRecords, [s.id]: {...current, weight: e.target.value}})} className="text-center h-8 text-xs px-1" /></TableCell>
-                                                        <TableCell className="p-1 text-center font-bold text-primary text-xs">{calculateBmi(current.height, current.weight)}</TableCell>
+                                                        <TableCell className="p-1 text-center font-bold text-xs">
+                                                            {(() => {
+                                                                const bmiStr = calculateBmi(current.height, current.weight);
+                                                                if (!bmiStr) return <span className="text-muted-foreground font-normal">-</span>;
+                                                                const bmiVal = parseFloat(bmiStr);
+                                                                const grade = getBmiGrade(s.grade, s.gender, bmiVal);
+                                                                const status = getBmiStatusText(s.grade, s.gender, bmiVal);
+                                                                
+                                                                const badgeColor = 
+                                                                    grade === 1 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300" :
+                                                                    grade === 2 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300" :
+                                                                    grade === 3 ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300" :
+                                                                    grade === 4 ? "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300" :
+                                                                    "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300";
+
+                                                                return (
+                                                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                                                        <span className="text-xs font-black text-foreground">{bmiStr}</span>
+                                                                        <Badge variant="outline" className={cn("text-[9px] px-1 py-0 h-4 font-bold border whitespace-nowrap", badgeColor)}>
+                                                                            {status} ({grade}등급)
+                                                                        </Badge>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </TableCell>
                                                     </>
                                                 ) : (
                                                     <TableCell className="p-1 text-center">
@@ -673,30 +816,34 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                                             </div>
                                                         </CardHeader>
                                                         <CardContent className="p-1.5 pt-0 flex-1 flex flex-col justify-center">
-                                                            <div className="rounded-md border bg-background/90 overflow-hidden shadow-inner">
-                                                                <Table className="w-full table-fixed">
-                                                                    <TableHeader>
-                                                                        <TableRow className="bg-muted/50 h-6">
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 w-[28px] font-bold">성별</TableHead>
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">1등급</TableHead>
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">2등급</TableHead>
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">3등급</TableHead>
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">4등급</TableHead>
-                                                                            <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">5등급</TableHead>
-                                                                        </TableRow>
-                                                                    </TableHeader>
-                                                                    <TableBody>
-                                                                        <TableRow className="h-6 hover:bg-muted/30">
-                                                                            <TableCell className="text-center font-black text-[9px] sm:text-[10px] p-0.5 text-blue-600 bg-muted/20">남</TableCell>
-                                                                            {renderGradeRanges('male', false)}
-                                                                        </TableRow>
-                                                                        <TableRow className="h-6 hover:bg-muted/30">
-                                                                            <TableCell className="text-center font-black text-[9px] sm:text-[10px] p-0.5 text-pink-600 bg-muted/20">여</TableCell>
-                                                                            {renderGradeRanges('female', false)}
-                                                                        </TableRow>
-                                                                    </TableBody>
-                                                                </Table>
-                                                            </div>
+                                                            {isBmiBatchItem ? (
+                                                                renderBmiStandardsView(false)
+                                                            ) : (
+                                                                <div className="rounded-md border bg-background/90 overflow-hidden shadow-inner">
+                                                                    <Table className="w-full table-fixed">
+                                                                        <TableHeader>
+                                                                            <TableRow className="bg-muted/50 h-6">
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 w-[28px] font-bold">성별</TableHead>
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">1등급</TableHead>
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">2등급</TableHead>
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">3등급</TableHead>
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">4등급</TableHead>
+                                                                                <TableHead className="text-center h-6 text-[9px] sm:text-[10px] p-0.5 font-bold text-primary">5등급</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            <TableRow className="h-6 hover:bg-muted/30">
+                                                                                <TableCell className="text-center font-black text-[9px] sm:text-[10px] p-0.5 text-blue-600 bg-muted/20">남</TableCell>
+                                                                                {renderGradeRanges('male', false)}
+                                                                            </TableRow>
+                                                                            <TableRow className="h-6 hover:bg-muted/30">
+                                                                                <TableCell className="text-center font-black text-[9px] sm:text-[10px] p-0.5 text-pink-600 bg-muted/20">여</TableCell>
+                                                                                {renderGradeRanges('female', false)}
+                                                                            </TableRow>
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            )}
                                                         </CardContent>
                                                     </Card>
                                                 </div>
@@ -733,30 +880,34 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                                 </div>
                                             </CardHeader>
                                             <CardContent className="p-3 pt-0">
-                                                <div className="rounded-lg border bg-background/90 overflow-hidden shadow-inner">
-                                                    <Table className="w-full">
-                                                        <TableHeader>
-                                                            <TableRow className="bg-muted/50 h-8">
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 w-[65px] font-bold">성별</TableHead>
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">1등급</TableHead>
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">2등급</TableHead>
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">3등급</TableHead>
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">4등급</TableHead>
-                                                                <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">5등급</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            <TableRow className="h-9 hover:bg-muted/30">
-                                                                <TableCell className="text-center font-black text-xs sm:text-sm p-1.5 text-blue-600 bg-muted/20">남학생</TableCell>
-                                                                {renderGradeRanges('male', true)}
-                                                            </TableRow>
-                                                            <TableRow className="h-9 hover:bg-muted/30">
-                                                                <TableCell className="text-center font-black text-xs sm:text-sm p-1.5 text-pink-600 bg-muted/20">여학생</TableCell>
-                                                                {renderGradeRanges('female', true)}
-                                                            </TableRow>
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
+                                                {isBmiBatchItem ? (
+                                                    renderBmiStandardsView(true)
+                                                ) : (
+                                                    <div className="rounded-lg border bg-background/90 overflow-hidden shadow-inner">
+                                                        <Table className="w-full">
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted/50 h-8">
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 w-[65px] font-bold">성별</TableHead>
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">1등급</TableHead>
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">2등급</TableHead>
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">3등급</TableHead>
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">4등급</TableHead>
+                                                                    <TableHead className="text-center h-8 text-xs sm:text-sm p-1.5 font-bold text-primary">5등급</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                <TableRow className="h-9 hover:bg-muted/30">
+                                                                    <TableCell className="text-center font-black text-xs sm:text-sm p-1.5 text-blue-600 bg-muted/20">남학생</TableCell>
+                                                                    {renderGradeRanges('male', true)}
+                                                                </TableRow>
+                                                                <TableRow className="h-9 hover:bg-muted/30">
+                                                                    <TableCell className="text-center font-black text-xs sm:text-sm p-1.5 text-pink-600 bg-muted/20">여학생</TableCell>
+                                                                    {renderGradeRanges('female', true)}
+                                                                </TableRow>
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     )}
@@ -839,9 +990,30 @@ export default function RecordInput({ allStudents, allItems, allRecords, onRecor
                                     <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-dashed">
                                         <div className="space-y-1"><Label className="text-xs">키 (cm)</Label><Input type="number" placeholder="예: 145.2" value={batchRecords[selectedStudent.id]?.height || ''} onChange={e => setBatchRecords({...batchRecords, [selectedStudent.id]: {...batchRecords[selectedStudent.id], height: e.target.value}})} className="h-9 text-sm" /></div>
                                         <div className="space-y-1"><Label className="text-xs">몸무게 (kg)</Label><Input type="number" placeholder="예: 38.5" value={batchRecords[selectedStudent.id]?.weight || ''} onChange={e => setBatchRecords({...batchRecords, [selectedStudent.id]: {...batchRecords[selectedStudent.id], weight: e.target.value}})} className="h-9 text-sm" /></div>
-                                        <div className="col-span-2 text-center pt-1 border-t">
-                                            <span className="text-xs font-bold text-muted-foreground mr-2">자동 계산된 BMI: </span>
-                                            <span className="text-xl font-black text-primary">{calculateBmi(batchRecords[selectedStudent.id]?.height, batchRecords[selectedStudent.id]?.weight) || '-'}</span>
+                                        <div className="col-span-2 text-center pt-2 border-t flex flex-col items-center justify-center gap-1">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <span className="text-xs font-bold text-muted-foreground">자동 계산된 BMI: </span>
+                                                <span className="text-xl font-black text-primary">{calculateBmi(batchRecords[selectedStudent.id]?.height, batchRecords[selectedStudent.id]?.weight) || '-'}</span>
+                                            </div>
+                                            {(() => {
+                                                const bmiStr = calculateBmi(batchRecords[selectedStudent.id]?.height, batchRecords[selectedStudent.id]?.weight);
+                                                if (!bmiStr) return null;
+                                                const bmiVal = parseFloat(bmiStr);
+                                                const grade = getBmiGrade(selectedStudent.grade, selectedStudent.gender, bmiVal);
+                                                const status = getBmiStatusText(selectedStudent.grade, selectedStudent.gender, bmiVal);
+                                                const badgeColor = 
+                                                    grade === 1 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300" :
+                                                    grade === 2 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300" :
+                                                    grade === 3 ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300" :
+                                                    grade === 4 ? "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300" :
+                                                    "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300";
+
+                                                return (
+                                                    <Badge variant="outline" className={cn("text-xs px-2.5 py-0.5 font-bold border", badgeColor)}>
+                                                        {status} ({grade}등급)
+                                                    </Badge>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 ) : (

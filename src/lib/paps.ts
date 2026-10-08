@@ -1,6 +1,81 @@
 
 import type { MeasurementItem, Student } from './types';
 
+export interface BmiEvaluationRange {
+  leanMax: number;       // 마름: <= leanMax
+  normalMin: number;     // 정상: normalMin ~ normalMax
+  normalMax: number;
+  overweightMin: number; // 과체중: overweightMin ~ overweightMax
+  overweightMax: number;
+  mildObesityMin: number;// 경도비만: mildObesityMin ~ mildObesityMax
+  mildObesityMax: number;
+  severeObesityMin: number; // 고도비만: >= severeObesityMin
+}
+
+export const BMI_EVALUATION_STANDARDS: Record<'남' | '여', Record<string, BmiEvaluationRange>> = {
+  '남': {
+    '4': { leanMax: 14.0, normalMin: 14.1, normalMax: 20.1, overweightMin: 20.2, overweightMax: 22.3, mildObesityMin: 22.4, mildObesityMax: 32.3, severeObesityMin: 32.4 },
+    '5': { leanMax: 14.3, normalMin: 14.4, normalMax: 20.9, overweightMin: 21.0, overweightMax: 23.3, mildObesityMin: 23.4, mildObesityMax: 33.3, severeObesityMin: 33.4 },
+    '6': { leanMax: 14.7, normalMin: 14.8, normalMax: 21.8, overweightMin: 21.9, overweightMax: 24.3, mildObesityMin: 24.4, mildObesityMax: 34.3, severeObesityMin: 34.4 },
+  },
+  '여': {
+    '4': { leanMax: 13.8, normalMin: 13.9, normalMax: 20.7, overweightMin: 20.8, overweightMax: 22.8, mildObesityMin: 22.9, mildObesityMax: 32.8, severeObesityMin: 32.9 },
+    '5': { leanMax: 14.2, normalMin: 14.3, normalMax: 21.6, overweightMin: 21.7, overweightMax: 23.9, mildObesityMin: 24.0, mildObesityMax: 33.9, severeObesityMin: 34.0 },
+    '6': { leanMax: 14.7, normalMin: 14.8, normalMax: 22.5, overweightMin: 22.6, overweightMax: 24.9, mildObesityMin: 25.0, mildObesityMax: 34.9, severeObesityMin: 35.0 },
+  }
+};
+
+export function getBmiGrade(grade: string | number, gender: string, value: number): number {
+  if (value === undefined || value === null || isNaN(value)) return 5;
+  
+  const genderKey: '남' | '여' = (gender === '여' || gender === 'female' || gender === 'F') ? '여' : '남';
+  const gradeStr = String(grade).replace(/[^0-9]/g, '');
+  const gradeNum = parseInt(gradeStr, 10);
+  
+  let targetGradeKey = '5';
+  if (!isNaN(gradeNum)) {
+    if (gradeNum <= 4) targetGradeKey = '4';
+    else if (gradeNum >= 6) targetGradeKey = '6';
+    else targetGradeKey = String(gradeNum);
+  }
+
+  const standards = BMI_EVALUATION_STANDARDS[genderKey]?.[targetGradeKey] || BMI_EVALUATION_STANDARDS[genderKey]['5'];
+  const roundedVal = Math.round(value * 10) / 10;
+
+  // 1등급(정상), 2등급(과체중), 3등급(마름), 4등급(경도비만), 5등급(고도비만)
+  if (roundedVal <= standards.leanMax) {
+    return 3; // 마름
+  }
+  if (roundedVal <= standards.normalMax) {
+    return 1; // 정상
+  }
+  if (roundedVal <= standards.overweightMax) {
+    return 2; // 과체중
+  }
+  if (roundedVal <= standards.mildObesityMax) {
+    return 4; // 경도비만
+  }
+  return 5; // 고도비만
+}
+
+export function getBmiStatusText(grade: string | number, gender: string, value: number): string {
+  const gradeResult = getBmiGrade(grade, gender, value);
+  switch (gradeResult) {
+    case 1:
+      return '정상';
+    case 2:
+      return '과체중';
+    case 3:
+      return '마름';
+    case 4:
+      return '경도비만';
+    case 5:
+      return '고도비만';
+    default:
+      return '정상';
+  }
+}
+
 // 1. PAPS 등급 기준표 (기존 유지)
 export const papsGradeStandards: Record<
   string, // 학년
@@ -46,8 +121,8 @@ export const papsGradeStandards: Record<
       type: 'weight'
     },
     '체질량지수(BMI)': {
-        male: [ { grade: 1, min: 14.1, max: 18.0 }, { grade: 2, min: 18.1, max: 19.9 }, { grade: 3, min: 12.8, max: 14.0 }, { grade: 4, min: 20.0, max: 21.6 }, { grade: 5, min: 0, max: 12.7 }, { grade: 5, min: 21.7, max: Infinity } ],
-        female: [ { grade: 1, min: 14.0, max: 18.2 }, { grade: 2, min: 18.3, max: 20.3 }, { grade: 3, min: 12.7, max: 13.9 }, { grade: 4, min: 20.4, max: 22.1 }, { grade: 5, min: 0, max: 12.6 }, { grade: 5, min: 22.2, max: Infinity } ],
+        male: [ { grade: 1, min: 14.1, max: 20.1 }, { grade: 2, min: 20.2, max: 22.3 }, { grade: 3, min: 0, max: 14.0 }, { grade: 4, min: 22.4, max: 32.3 }, { grade: 5, min: 32.4, max: Infinity } ],
+        female: [ { grade: 1, min: 13.9, max: 20.7 }, { grade: 2, min: 20.8, max: 22.8 }, { grade: 3, min: 0, max: 13.8 }, { grade: 4, min: 22.9, max: 32.8 }, { grade: 5, min: 32.9, max: Infinity } ],
         type: 'compound'
     }
   },
@@ -83,8 +158,8 @@ export const papsGradeStandards: Record<
       type: 'weight'
     },
     '체질량지수(BMI)': {
-        male: [ { grade: 1, min: 14.5, max: 18.9 }, { grade: 2, min: 19.0, max: 20.9 }, { grade: 3, min: 13.2, max: 14.4 }, { grade: 4, min: 21.0, max: 22.7 }, { grade: 5, min: 0, max: 13.1 }, { grade: 5, min: 22.8, max: Infinity } ],
-        female: [ { grade: 1, min: 14.4, max: 19.2 }, { grade: 2, min: 19.3, max: 21.4 }, { grade: 3, min: 13.1, max: 14.3 }, { grade: 4, min: 21.5, max: 23.3 }, { grade: 5, min: 0, max: 13.0 }, { grade: 5, min: 23.4, max: Infinity } ],
+        male: [ { grade: 1, min: 14.4, max: 20.9 }, { grade: 2, min: 21.0, max: 23.3 }, { grade: 3, min: 0, max: 14.3 }, { grade: 4, min: 23.4, max: 33.3 }, { grade: 5, min: 33.4, max: Infinity } ],
+        female: [ { grade: 1, min: 14.3, max: 21.6 }, { grade: 2, min: 21.7, max: 23.9 }, { grade: 3, min: 0, max: 14.2 }, { grade: 4, min: 24.0, max: 33.9 }, { grade: 5, min: 34.0, max: Infinity } ],
         type: 'compound'
     }
   },
@@ -120,8 +195,8 @@ export const papsGradeStandards: Record<
       type: 'weight'
     },
      '체질량지수(BMI)': {
-        male: [ { grade: 1, min: 15.0, max: 19.9 }, { grade: 2, min: 20.0, max: 21.9 }, { grade: 3, min: 13.6, max: 14.9 }, { grade: 4, min: 22.0, max: 23.8 }, { grade: 5, min: 0, max: 13.5 }, { grade: 5, min: 23.9, max: Infinity } ],
-        female: [ { grade: 1, min: 14.9, max: 20.1 }, { grade: 2, min: 20.2, max: 22.4 }, { grade: 3, min: 13.5, max: 14.8 }, { grade: 4, min: 22.5, max: 24.4 }, { grade: 5, min: 0, max: 13.4 }, { grade: 5, min: 24.5, max: Infinity } ],
+        male: [ { grade: 1, min: 14.8, max: 21.8 }, { grade: 2, min: 21.9, max: 24.3 }, { grade: 3, min: 0, max: 14.7 }, { grade: 4, min: 24.4, max: 34.3 }, { grade: 5, min: 34.4, max: Infinity } ],
+        female: [ { grade: 1, min: 14.8, max: 22.5 }, { grade: 2, min: 22.6, max: 24.9 }, { grade: 3, min: 0, max: 14.7 }, { grade: 4, min: 25.0, max: 34.9 }, { grade: 5, min: 35.0, max: Infinity } ],
         type: 'compound'
     }
   },
@@ -216,6 +291,10 @@ papsStandards['오래달리기'] = { type: 'time', unit: '초' };
 
 
 export function getPapsGrade(item: string, student: Student, value: number): number | null {
+  if (item === '체질량지수(BMI)' || item === 'BMI') {
+    return getBmiGrade(student.grade, student.gender, value);
+  }
+
   const gradeKey = student.grade;
   let gradeStandard = papsGradeStandards[gradeKey];
   
@@ -239,11 +318,7 @@ export function getPapsGrade(item: string, student: Student, value: number): num
   if (!thresholds || thresholds.length === 0) return null;
 
   for (const range of thresholds) {
-    if (item === '체질량지수(BMI)') {
-        if (value >= range.min && value <= range.max) {
-            return range.grade;
-        }
-    } else if (standard.type === 'time') {
+    if (standard.type === 'time') {
         if (value <= range.max && value >= range.min) {
             return range.grade;
         }
@@ -252,15 +327,6 @@ export function getPapsGrade(item: string, student: Student, value: number): num
             return range.grade;
         }
     }
-  }
-
-  if (item === '체질량지수(BMI)') {
-      const grade5Ranges = thresholds.filter(r => r.grade === 5);
-      for (const range of grade5Ranges) {
-          if (value >= range.min && value <= range.max) {
-              return 5;
-          }
-      }
   }
   
   const isTimeType = standard.type === 'time';
