@@ -32,7 +32,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { FileDown, Calendar as CalendarIcon, BookOpen, Trash2, Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { FileDown, Calendar as CalendarIcon, BookOpen, Trash2, Loader2, Filter, ArrowUp, ArrowDown, RotateCcw, Search, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -101,6 +103,18 @@ export default function RecordBrowser({
   const [itemDateFilter, setItemDateFilter] = useState('latest');
   const [isDeleting, setIsDeleting] = useState(false);
   
+  // 엑셀 스타일 컬럼별 선택 필터 상태: { [columnKey]: string[] (선택된 값들) }
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [columnSearchTerm, setColumnSearchTerm] = useState<Record<string, string>>({});
+
+  const clearAllFilters = () => {
+    setColumnFilters({});
+  };
+
+  const isAnyFilterActive = useMemo(() => {
+    return Object.values(columnFilters).some(arr => arr && arr.length > 0);
+  }, [columnFilters]);
+
   const [itemSort, setItemSort] = useState<SortDescriptor[]>([
     { column: 'grade', direction: 'ascending' },
     { column: 'classNum', direction: 'ascending' },
@@ -578,10 +592,53 @@ export default function RecordBrowser({
 
   }, [school, selectedItem, itemGradeFilter, itemClassNumFilter, itemDateFilter, allStudents, allRecords, allItems, quizResults, quizAssignments, selectedPeriodEval, measurementPeriods]);
 
+  // 1단계: 엑셀 스타일 컬럼별 필터 적용
+  const filteredItemData = useMemo(() => {
+    if (!Object.keys(columnFilters).length) return studentItemTableData;
+
+    return studentItemTableData.filter(student => {
+      for (const [colKey, selectedValues] of Object.entries(columnFilters)) {
+        if (!selectedValues || selectedValues.length === 0) continue;
+
+        let rawVal = '';
+        if (colKey === 'name') rawVal = student.name;
+        else if (colKey === 'grade') rawVal = `${student.grade}학년`;
+        else if (colKey === 'classNum') rawVal = `${student.classNum}반`;
+        else if (colKey === 'studentNum') rawVal = `${student.studentNum}번`;
+        else if (colKey === 'latestDate') rawVal = (student as any).latestDate || '-';
+        else if (colKey === 'value') {
+          rawVal = (student as any).value !== null && (student as any).value !== undefined
+            ? (selectedPeriodEval ? `${(student as any).value}점` : `${(student as any).value}${selectedItemInfo?.unit || ''}`)
+            : '-';
+        }
+        else if (colKey === 'evalGrade') rawVal = (student as any).evalGrade || '-';
+        else if (colKey === 'recordGrade') rawVal = (student as any).recordGrade ? `${(student as any).recordGrade}등급` : '-';
+        else if (colKey.startsWith('sub_')) {
+          const subName = colKey.replace('sub_', '');
+          const score = (student as any).itemScores?.[subName];
+          rawVal = score !== null && score !== undefined ? `${score}개` : '-';
+        }
+        else if (colKey === 'rank') {
+          rawVal = (student as any).rank ? `${(student as any).rank}등` : '-';
+        }
+        else if (colKey === 'quizTitle') rawVal = (student as any).quizTitle || '-';
+        else if (colKey === 'score') rawVal = (student as any).score || '-';
+        else if (colKey === 'passed') rawVal = (student as any).passed ? '통과' : '미통과';
+        else rawVal = String((student as any)[colKey] ?? '-');
+
+        if (!selectedValues.includes(rawVal)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [studentItemTableData, columnFilters, selectedPeriodEval, selectedItemInfo]);
+
+  // 2단계: 다중 정렬 적용
   const sortedItemData = useMemo(() => {
-      if (!itemSort.length) return studentItemTableData;
+      if (!itemSort.length) return filteredItemData;
       
-      return [...studentItemTableData].sort((a,b) => {
+      return [...filteredItemData].sort((a,b) => {
         for (const sort of itemSort) {
             const { column, direction } = sort;
             const isAsc = direction === 'ascending';
@@ -739,6 +796,83 @@ export default function RecordBrowser({
     setItemClassNumFilter('all');
   }, [itemGradeFilter]);
   
+  // 컬럼별 고유 값 목록 추출 함수 (엑셀 필터 팝오버용)
+  const getDistinctColumnValues = (colKey: string): string[] => {
+    const set = new Set<string>();
+    studentItemTableData.forEach(student => {
+      let rawVal = '';
+      if (colKey === 'name') rawVal = student.name;
+      else if (colKey === 'grade') rawVal = `${student.grade}학년`;
+      else if (colKey === 'classNum') rawVal = `${student.classNum}반`;
+      else if (colKey === 'studentNum') rawVal = `${student.studentNum}번`;
+      else if (colKey === 'latestDate') rawVal = (student as any).latestDate || '-';
+      else if (colKey === 'value') {
+        rawVal = (student as any).value !== null && (student as any).value !== undefined
+          ? (selectedPeriodEval ? `${(student as any).value}점` : `${(student as any).value}${selectedItemInfo?.unit || ''}`)
+          : '-';
+      }
+      else if (colKey === 'evalGrade') rawVal = (student as any).evalGrade || '-';
+      else if (colKey === 'recordGrade') rawVal = (student as any).recordGrade ? `${(student as any).recordGrade}등급` : '-';
+      else if (colKey.startsWith('sub_')) {
+        const subName = colKey.replace('sub_', '');
+        const score = (student as any).itemScores?.[subName];
+        rawVal = score !== null && score !== undefined ? `${score}개` : '-';
+      }
+      else if (colKey === 'rank') {
+        rawVal = (student as any).rank ? `${(student as any).rank}등` : '-';
+      }
+      else if (colKey === 'quizTitle') rawVal = (student as any).quizTitle || '-';
+      else if (colKey === 'score') rawVal = (student as any).score || '-';
+      else if (colKey === 'passed') rawVal = (student as any).passed ? '통과' : '미통과';
+      else rawVal = String((student as any)[colKey] ?? '-');
+
+      set.add(rawVal);
+    });
+
+    return Array.from(set).sort((a, b) => {
+      // 숫자 포함 시 숫자 오름차순, 그 외 한글 가나다순
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
+  };
+
+  const handleSetSort = (column: string, direction: 'ascending' | 'descending') => {
+    setItemSort([{ column, direction }]);
+  };
+
+  const handleToggleColumnFilterValue = (colKey: string, val: string, allVals: string[]) => {
+    const currentSelected = columnFilters[colKey] !== undefined 
+      ? columnFilters[colKey] 
+      : allVals; // 초기에는 전체 선택 상태
+
+    const isChecked = currentSelected.includes(val);
+    const nextSelected = isChecked
+      ? currentSelected.filter(v => v !== val)
+      : [...currentSelected, val];
+
+    setColumnFilters(prev => ({
+      ...prev,
+      [colKey]: nextSelected
+    }));
+  };
+
+  const handleSelectAllColumnFilter = (colKey: string, allVals: string[], selectAll: boolean) => {
+    setColumnFilters(prev => ({
+      ...prev,
+      [colKey]: selectAll ? allVals : []
+    }));
+  };
+
+  const clearColumnFilter = (colKey: string) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      delete next[colKey];
+      return next;
+    });
+  };
+
   const createSortHandler = (column: string, sortState: SortDescriptor[], setSortState: (descriptor: SortDescriptor[]) => void) => () => {
     const existingSortIndex = sortState.findIndex(s => s.column === column);
 
@@ -1031,7 +1165,18 @@ export default function RecordBrowser({
                             ))}
                             </SelectContent>
                         </Select>
-                        <Button onClick={handleItemDownloadExcel} variant="outline" size="sm" className="ml-auto h-7 sm:h-8 px-2 text-xs" disabled={!selectedItem} title="엑셀 다운로드">
+                        {isAnyFilterActive && (
+                          <Button 
+                            onClick={clearAllFilters} 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 sm:h-8 px-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-bold flex items-center gap-1 border border-amber-500/30 ml-auto"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>필터 초기화</span>
+                          </Button>
+                        )}
+                        <Button onClick={handleItemDownloadExcel} variant="outline" size="sm" className={cn("h-7 sm:h-8 px-2 text-xs", !isAnyFilterActive && "ml-auto")} disabled={!selectedItem} title="엑셀 다운로드">
                             <FileDown className="h-3.5 w-3.5 sm:mr-1.5" />
                             <span className="hidden sm:inline">엑셀 다운로드</span>
                         </Button>
@@ -1071,19 +1216,133 @@ export default function RecordBrowser({
                                         { key: 'recordGrade', label: '등급' },
                                         { key: 'rank', label: '순위' },
                                       ])
-                                    ].map((header) => (
+                                    ].map((header) => {
+                                      const distinctVals = getDistinctColumnValues(header.key);
+                                      const activeFilteredVals = columnFilters[header.key];
+                                      const isColumnFiltered = activeFilteredVals !== undefined && activeFilteredVals.length < distinctVals.length;
+                                      const currentSearch = (columnSearchTerm[header.key] || '').toLowerCase();
+                                      const filteredDistinctVals = distinctVals.filter(v => v.toLowerCase().includes(currentSearch));
+                                      const isAllChecked = !activeFilteredVals || activeFilteredVals.length === distinctVals.length;
+
+                                      return (
                                        <TableHead 
                                           key={header.key} 
-                                          onClick={createSortHandler(header.key, itemSort, setItemSort)} 
                                           className={cn(
-                                              "cursor-pointer hover:bg-muted whitespace-nowrap p-1 text-[11px] sm:text-xs font-bold",
-                                              header.isNarrow ? "w-8 sm:w-10 text-center" : header.isName ? "min-w-[50px] text-left" : "text-center min-w-[50px] sm:min-w-[70px]"
+                                              "whitespace-nowrap p-1 text-[11px] sm:text-xs font-bold select-none group",
+                                              header.isNarrow ? "w-8 sm:w-10 text-center" : header.isName ? "min-w-[50px] text-left" : "text-center min-w-[50px] sm:min-w-[70px]",
+                                              isColumnFiltered && "bg-primary/10 text-primary"
                                           )}
                                        >
-                                          {header.label}
-                                          {getSortIndicator(header.key, itemSort)}
+                                          <div className={cn("inline-flex items-center gap-1", header.isNarrow ? "justify-center" : header.isName ? "justify-start" : "justify-center")}>
+                                            <span 
+                                              onClick={createSortHandler(header.key, itemSort, setItemSort)} 
+                                              className="cursor-pointer hover:underline flex items-center"
+                                              title="클릭 시 다중 정렬"
+                                            >
+                                              {header.label}
+                                              {getSortIndicator(header.key, itemSort)}
+                                            </span>
+
+                                            {/* 엑셀 스타일 드롭다운 필터/정렬 트리거 */}
+                                            <Popover>
+                                              <PopoverTrigger asChild>
+                                                <Button 
+                                                  variant="ghost" 
+                                                  size="icon" 
+                                                  className={cn(
+                                                    "h-5 w-5 p-0 rounded hover:bg-muted/80 transition-colors",
+                                                    isColumnFiltered ? "text-primary font-bold bg-primary/20" : "text-muted-foreground/60 hover:text-foreground"
+                                                  )}
+                                                  title="${header.label} 정렬 및 필터"
+                                                >
+                                                  <Filter className={cn("h-3 w-3", isColumnFiltered && "fill-primary")} />
+                                                </Button>
+                                              </PopoverTrigger>
+                                              <PopoverContent align="start" className="w-56 p-2 space-y-2 shadow-lg border text-xs">
+                                                {/* 상단: 정렬 옵션 */}
+                                                <div className="space-y-1 pb-1.5 border-b border-border/60">
+                                                  <button
+                                                    onClick={() => handleSetSort(header.key, 'ascending')}
+                                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary text-left font-medium"
+                                                  >
+                                                    <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+                                                    <span>오름차순 정렬</span>
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleSetSort(header.key, 'descending')}
+                                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary text-left font-medium"
+                                                  >
+                                                    <ArrowDown className="h-3.5 w-3.5 text-red-600" />
+                                                    <span>내림차순 정렬</span>
+                                                  </button>
+                                                </div>
+
+                                                {/* 중단: 필터 검색 입력창 */}
+                                                <div className="relative">
+                                                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                                  <Input 
+                                                    placeholder="값 검색..."
+                                                    value={columnSearchTerm[header.key] || ''}
+                                                    onChange={e => setColumnSearchTerm(prev => ({ ...prev, [header.key]: e.target.value }))}
+                                                    className="h-7 pl-7 text-[11px]"
+                                                  />
+                                                </div>
+
+                                                {/* (전체 선택) 체크박스 */}
+                                                <div className="flex items-center justify-between px-1 pt-1 border-b pb-1 text-[11px]">
+                                                  <div className="flex items-center gap-2">
+                                                    <Checkbox 
+                                                      id={`filter-all-${header.key}`}
+                                                      checked={isAllChecked}
+                                                      onCheckedChange={(checked) => handleSelectAllColumnFilter(header.key, distinctVals, !!checked)}
+                                                    />
+                                                    <label htmlFor={`filter-all-${header.key}`} className="cursor-pointer font-semibold">
+                                                      (모두 선택)
+                                                    </label>
+                                                  </div>
+                                                  {isColumnFiltered && (
+                                                    <button 
+                                                      onClick={() => clearColumnFilter(header.key)}
+                                                      className="text-[10px] text-primary hover:underline font-medium"
+                                                    >
+                                                      필터 해제
+                                                    </button>
+                                                  )}
+                                                </div>
+
+                                                {/* 하단: 고유 값 체크박스 목록 (스크롤) */}
+                                                <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
+                                                  {filteredDistinctVals.length > 0 ? (
+                                                    filteredDistinctVals.map((val) => {
+                                                      const currentSelected = activeFilteredVals !== undefined ? activeFilteredVals : distinctVals;
+                                                      const isChecked = currentSelected.includes(val);
+                                                      return (
+                                                        <div 
+                                                          key={val} 
+                                                          onClick={() => handleToggleColumnFilterValue(header.key, val, distinctVals)}
+                                                          className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted/60 cursor-pointer text-[11px]"
+                                                        >
+                                                          <Checkbox 
+                                                            id={`filter-${header.key}-${val}`}
+                                                            checked={isChecked}
+                                                            onCheckedChange={() => {}}
+                                                          />
+                                                          <span className="truncate flex-1 font-medium">{val}</span>
+                                                        </div>
+                                                      );
+                                                    })
+                                                  ) : (
+                                                    <div className="text-center py-2 text-[10px] text-muted-foreground">
+                                                      일치하는 항목 없음
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </PopoverContent>
+                                            </Popover>
+                                          </div>
                                        </TableHead>
-                                    ))}
+                                      );
+                                    })}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
