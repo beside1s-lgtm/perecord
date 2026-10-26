@@ -24,7 +24,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -107,12 +110,43 @@ export default function RecordBrowser({
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [quizAssignments, setQuizAssignments] = useState<QuizAssignment[]>([]);
 
-  // Filter for items that actually have at least one record
-  const itemsWithRecords = useMemo(() => {
+  // Filter for items that actually have at least one record, grouped by category
+  const { groupedItemsWithRecords, totalRecordedItemsCount } = useMemo(() => {
     const recordedItemNames = new Set(allRecords.map(r => r.item));
-    return allItems
-      .filter(item => recordedItemNames.has(item.name))
+    const items = allItems.filter(item => recordedItemNames.has(item.name));
+    
+    const papsItems = items
+      .filter(i => i.isPaps)
       .sort((a, b) => a.name.localeCompare(b.name));
+      
+    const nonPapsItems = items.filter(i => !i.isPaps);
+    const categoryMap = new Map<string, MeasurementItem[]>();
+    
+    nonPapsItems.forEach(item => {
+      const cat = item.category?.trim() || '기타 종목';
+      if (!categoryMap.has(cat)) {
+        categoryMap.set(cat, []);
+      }
+      categoryMap.get(cat)!.push(item);
+    });
+
+    const sportsGroups: { category: string; items: MeasurementItem[] }[] = [];
+    Array.from(categoryMap.entries())
+      .sort(([catA], [catB]) => catA.localeCompare(catB))
+      .forEach(([category, catItems]) => {
+        sportsGroups.push({
+          category,
+          items: catItems.sort((a, b) => a.name.localeCompare(b.name))
+        });
+      });
+
+    return {
+      groupedItemsWithRecords: {
+        paps: papsItems,
+        sports: sportsGroups,
+      },
+      totalRecordedItemsCount: items.length
+    };
   }, [allItems, allRecords]);
 
   useEffect(() => {
@@ -725,15 +759,39 @@ export default function RecordBrowser({
                 <TabsContent value="item" className="space-y-2 sm:space-y-4">
                     <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 pt-2">
                        <Select value={selectedItem} onValueChange={setSelectedItem}>
-                          <SelectTrigger className="w-[120px] sm:w-[160px] h-7 sm:h-8 text-[11px] sm:text-xs font-semibold">
+                          <SelectTrigger className="w-[140px] sm:w-[180px] h-7 sm:h-8 text-[11px] sm:text-xs font-semibold">
                             <SelectValue placeholder="종목 선택" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-96 min-w-[200px]">
                             <SelectItem value="theory-exam" className="font-bold text-primary flex items-center">
                                 <BookOpen className="h-3.5 w-3.5 mr-1.5" /> 이론 평가
                             </SelectItem>
-                            {itemsWithRecords.map((item) => (
-                              <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>
+
+                            {groupedItemsWithRecords.paps.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel className="text-[10px] sm:text-xs font-extrabold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-1 rounded-sm mt-1 mb-0.5">
+                                  PAPS 정규 종목 ({groupedItemsWithRecords.paps.length})
+                                </SelectLabel>
+                                {groupedItemsWithRecords.paps.map((item) => (
+                                  <SelectItem key={item.id} value={item.name} className="text-xs">
+                                    {item.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+
+                            {groupedItemsWithRecords.sports.map((group) => (
+                              <SelectGroup key={group.category}>
+                                <SelectSeparator className="my-1" />
+                                <SelectLabel className="text-[10px] sm:text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-sm mb-0.5">
+                                  {group.category} ({group.items.length})
+                                </SelectLabel>
+                                {group.items.map((item) => (
+                                  <SelectItem key={item.id} value={item.name} className="text-xs font-medium">
+                                    {item.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
                             ))}
                           </SelectContent>
                        </Select>
