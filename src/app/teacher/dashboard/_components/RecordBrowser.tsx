@@ -2,8 +2,8 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { exportToExcel, getQuizResultsBySchool, getQuizAssignments, deleteRecordsByDateAndItem } from '@/lib/store';
-import type { Student, MeasurementItem, MeasurementRecord, QuizResult, QuizAssignment, SportsClub } from '@/lib/types';
+import { exportToExcel, getQuizResultsBySchool, getQuizAssignments, deleteRecordsByDateAndItem, getSchoolByName } from '@/lib/store';
+import type { Student, MeasurementItem, MeasurementRecord, QuizResult, QuizAssignment, SportsClub, MeasurementPeriod } from '@/lib/types';
 import { getPapsGrade, calculatePapsScore, getCustomItemGrade } from '@/lib/paps';
 import { calculateRanks } from '@/lib/store';
 import {
@@ -109,6 +109,17 @@ export default function RecordBrowser({
   
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [quizAssignments, setQuizAssignments] = useState<QuizAssignment[]>([]);
+  const [measurementPeriods, setMeasurementPeriods] = useState<MeasurementPeriod[]>([]);
+
+  useEffect(() => {
+    if (school) {
+      getSchoolByName(school).then(s => {
+        if (s?.measurementPeriods) {
+          setMeasurementPeriods(s.measurementPeriods);
+        }
+      });
+    }
+  }, [school]);
 
   // Filter for items that actually have at least one record, grouped by category
   const { groupedItemsWithRecords, totalRecordedItemsCount } = useMemo(() => {
@@ -333,8 +344,124 @@ export default function RecordBrowser({
   }, [viewType]);
 
 
+  // 현재 선택된 항목이 기간 종합 평가인지 확인
+  const selectedPeriodEval = useMemo(() => {
+    if (!selectedItem.startsWith('period-eval:')) return null;
+    const periodId = selectedItem.replace('period-eval:', '');
+    return measurementPeriods.find(p => p.id === periodId) || null;
+  }, [selectedItem, measurementPeriods]);
+
   const studentItemTableData = useMemo(() => {
     if (!selectedItem || !school) return [];
+
+    // 1. 기간 종합 평가 (예: 피클볼 평가 - 서브 + 딩크)
+    if (selectedPeriodEval) {
+      let filteredStudents = allStudents;
+      if (selectedClubId !== 'all') {
+        const club = sportsClubs.find(c => c.id === selectedClubId);
+        if (club) filteredStudents = filteredStudents.filter(s => club.memberIds.includes(s.id));
+      } else if (itemGradeFilter !== 'all') {
+        filteredStudents = filteredStudents.filter(s => s.grade === itemGradeFilter);
+        if (itemClassNumFilter !== 'all') {
+          filteredStudents = filteredStudents.filter(s => s.classNum === itemClassNumFilter);
+        }
+      }
+
+      if (filteredStudents.length === 0) return [];
+
+      const targetItemNames = (selectedPeriodEval.criteria?.itemNames && selectedPeriodEval.criteria.itemNames.length > 0)
+        ? selectedPeriodEval.criteria.itemNames
+        : (selectedPeriodEval.itemNames && selectedPeriodEval.itemNames.length > 0
+            ? selectedPeriodEval.itemNames
+            : allItems.filter(i => i.isMeasurementWeek && !i.isArchived && !i.isDeactivated).map(i => i.name));
+
+      const highMin = selectedPeriodEval.criteria?.highMin ?? 8;
+      const midMin = selectedPeriodEval.criteria?.midMin ?? 5;
+
+      // 전체 학생 기준 합산 점수 및 랭킹 산출
+      const scoresWithStudents = allStudents.map(student => {
+        let studentRecords = allRecords.filter(r => r.studentId === student.id && targetItemNames.includes(r.item));
+        if (itemDateFilter !== 'latest' && itemDateFilter !== 'all') {
+          studentRecords = studentRecords.filter(r => r.date === itemDateFilter);
+        }
+
+        let totalScore = 0;
+        let recordedItemCount = 0;
+        let latestDate: string | null = null;
+        const itemScores: Record<string, number | null> = {};
+
+        targetItemNames.forEach(itemName => {
+          const itemRecs = studentRecords.filter(r => r.item === itemName);
+          if (itemRecs.length > 0) {
+            const bestOrLatest = itemDateFilter === 'latest'
+              ? itemRecs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+              : itemRecs[0];
+            const numVal = parseFloat(String(bestOrLatest.value)) || 0;
+            totalScore += numVal;
+            recordedItemCount++;
+            itemScores[itemName] = numVal;
+            if (!latestDate || new Date(bestOrLatest.date).getTime() > new Date(latestDate).getTime()) {
+              latestDate = bestOrLatest.date;
+            }
+          } else {
+            itemScores[itemName] = null;
+          }
+        });
+
+        const hasAnyRecord = recordedItemCount > 0;
+        let evalGrade = '-';
+        if (hasAnyRecord) {
+          if (totalScore >= highMin) evalGrade = '잘함';
+          else if (totalScore >= midMin) evalGrade = '보통';
+          else evalGrade = '노력요함';
+        }
+
+        return {
+          studentId: student.id,
+          grade: student.grade,
+          totalScore: hasAnyRecord ? totalScore : null,
+          hasAnyRecord,
+          itemScores,
+          latestDate,
+          evalGrade
+        };
+      });
+
+      // 랭킹 산출 (동점자 동일 순위)
+      const rankFilterGrade = itemGradeFilter === 'all' ? undefined : itemGradeFilter;
+      const rankedPool = scoresWithStudents
+        .filter(s => s.hasAnyRecord && (rankFilterGrade ? s.grade === rankFilterGrade : true))
+        .sort((a, b) => (b.totalScore ?? -999) - (a.totalScore ?? -999));
+
+      const rankMap = new Map();
+      let curRank = 1;
+      rankedPool.forEach((item, index) => {
+        if (index > 0 && item.totalScore !== rankedPool[index - 1].totalScore) {
+          curRank = index + 1;
+        }
+        rankMap.set(item.studentId, curRank);
+      });
+
+      return filteredStudents.map(student => {
+        const stat = scoresWithStudents.find(s => s.studentId === student.id);
+        const rank = stat?.studentId ? rankMap.get(stat.studentId) : null;
+
+        return {
+          ...student,
+          latestDate: stat?.latestDate || null,
+          value: stat?.totalScore !== null && stat?.totalScore !== undefined ? stat.totalScore : null,
+          recordGrade: stat?.evalGrade !== '-' ? stat?.evalGrade : null,
+          evalGrade: stat?.evalGrade || '-',
+          itemScores: stat?.itemScores || {},
+          targetItemNames,
+          rank: rank || null,
+          totalRanked: rankedPool.length,
+          quizTitle: null,
+          score: null,
+          passed: null
+        };
+      });
+    }
 
     if (selectedItem === 'theory-exam') {
         let filteredStudents = allStudents;
@@ -356,6 +483,9 @@ export default function RecordBrowser({
                     quizTitle: '-',
                     score: '-',
                     recordGrade: null,
+                    evalGrade: null,
+                    itemScores: {},
+                    targetItemNames: [],
                     passed: false,
                     latestDate: '-',
                     rank: null,
@@ -370,6 +500,9 @@ export default function RecordBrowser({
                     quizTitle: assignment?.quizTitle || '알 수 없는 퀴즈',
                     score: `${r.score} / ${r.total}`,
                     recordGrade: null,
+                    evalGrade: null,
+                    itemScores: {},
+                    targetItemNames: [],
                     passed: r.passed,
                     latestDate: r.createdAt?.toDate ? format(r.createdAt.toDate(), 'yyyy-MM-dd') : '-',
                     rank: null,
@@ -432,6 +565,9 @@ export default function RecordBrowser({
         height: latestRecord?.height,
         weight: latestRecord?.weight,
         recordGrade, 
+        evalGrade: null,
+        itemScores: {},
+        targetItemNames: [],
         rank: rankInfo ? rankInfo.rank : null,
         totalRanked: itemRanks.length,
         quizTitle: null,
@@ -440,7 +576,7 @@ export default function RecordBrowser({
       };
     });
 
-  }, [school, selectedItem, itemGradeFilter, itemClassNumFilter, itemDateFilter, allStudents, allRecords, allItems, quizResults, quizAssignments]);
+  }, [school, selectedItem, itemGradeFilter, itemClassNumFilter, itemDateFilter, allStudents, allRecords, allItems, quizResults, quizAssignments, selectedPeriodEval, measurementPeriods]);
 
   const sortedItemData = useMemo(() => {
       if (!itemSort.length) return studentItemTableData;
@@ -459,6 +595,12 @@ export default function RecordBrowser({
             else if(column === 'latestDate'){ valA = (a as any).latestDate; valB = (b as any).latestDate }
             else if(column === 'value'){ valA = (a as any).value || (a as any).score; valB = (b as any).value || (b as any).score }
             else if(column === 'recordGrade'){ valA = (a as any).recordGrade; valB = (b as any).recordGrade }
+            else if(column === 'evalGrade'){ valA = (a as any).evalGrade; valB = (b as any).evalGrade }
+            else if(column.startsWith('sub_')){ 
+              const subName = column.replace('sub_', '');
+              valA = (a as any).itemScores?.[subName]; 
+              valB = (b as any).itemScores?.[subName]; 
+            }
             else if(column === 'rank'){ valA = (a as any).rank; valB = (b as any).rank }
             else { valA = (a as any)[column]; valB = (b as any)[column]; }
 
@@ -467,7 +609,7 @@ export default function RecordBrowser({
             if (valB == null) return -1;
             
             let comparison = 0;
-            if (column === 'value' || column === 'recordGrade' || column === 'rank' || column === 'grade' || column === 'classNum' || column === 'studentNum') {
+            if (column === 'value' || column === 'recordGrade' || column === 'rank' || column === 'grade' || column === 'classNum' || column === 'studentNum' || column.startsWith('sub_')) {
                 const itemInfo = allItems.find(i => i.name === selectedItem);
                 
                 const numA = parseFloat(valA);
@@ -501,6 +643,42 @@ export default function RecordBrowser({
         variant: 'destructive',
         title: '다운로드 실패',
         description: '다운로드할 데이터가 없습니다.',
+      });
+      return;
+    }
+
+    if (selectedPeriodEval) {
+      const targetItems = (selectedPeriodEval.criteria?.itemNames && selectedPeriodEval.criteria.itemNames.length > 0)
+        ? selectedPeriodEval.criteria.itemNames
+        : (selectedPeriodEval.itemNames && selectedPeriodEval.itemNames.length > 0
+            ? selectedPeriodEval.itemNames
+            : allItems.filter(i => i.isMeasurementWeek && !i.isArchived && !i.isDeactivated).map(i => i.name));
+
+      const dataToExport = sortedItemData.map(s => {
+        const row: Record<string, any> = {
+          '학년': s.grade,
+          '반': s.classNum,
+          '번호': s.studentNum,
+          '이름': s.name,
+          '최근 측정일': s.latestDate || '-',
+        };
+
+        targetItems.forEach(itemName => {
+          const score = (s as any).itemScores?.[itemName];
+          row[itemName] = score !== null && score !== undefined ? `${score}개` : '-';
+        });
+
+        row['총점 (합산)'] = s.value !== null && s.value !== undefined ? `${s.value}점` : '-';
+        row['평가 결과'] = (s as any).evalGrade || '-';
+        row['순위'] = s.rank ? `${s.rank}등` : '-';
+        return row;
+      });
+
+      const fileName = `${selectedPeriodEval.name}_종합평가_현황_${new Date().toISOString().split('T')[0]}.xlsx`;
+      exportToExcel(fileName, dataToExport);
+      toast({
+        title: '다운로드 시작',
+        description: `${selectedPeriodEval.name} 종합 평가 결과를 엑셀 파일로 다운로드합니다.`,
       });
       return;
     }
@@ -762,7 +940,27 @@ export default function RecordBrowser({
                           <SelectTrigger className="w-[140px] sm:w-[180px] h-7 sm:h-8 text-[11px] sm:text-xs font-semibold">
                             <SelectValue placeholder="종목 선택" />
                           </SelectTrigger>
-                          <SelectContent className="max-h-96 min-w-[200px]">
+                          <SelectContent className="max-h-96 min-w-[220px]">
+                            {/* 1. 상위 종합 평가 주간 항목 */}
+                            {measurementPeriods.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel className="text-[10px] sm:text-xs font-extrabold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded-sm mt-1 mb-0.5 flex items-center justify-between">
+                                  <span>🏆 기간 종합 평가 ({measurementPeriods.length})</span>
+                                </SelectLabel>
+                                {measurementPeriods.map((period) => (
+                                  <SelectItem 
+                                    key={period.id} 
+                                    value={`period-eval:${period.id}`}
+                                    className="text-xs font-bold text-primary"
+                                  >
+                                    🏅 {period.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+
+                            <SelectSeparator className="my-1" />
+
                             <SelectItem value="theory-exam" className="font-bold text-primary flex items-center">
                                 <BookOpen className="h-3.5 w-3.5 mr-1.5" /> 이론 평가
                             </SelectItem>
@@ -847,7 +1045,18 @@ export default function RecordBrowser({
                                       { key: 'classNum', label: '반', isNarrow: true },
                                       { key: 'studentNum', label: '번호', isNarrow: true },
                                       { key: 'name', label: '이름', isName: true },
-                                      ...(selectedItem === 'theory-exam' ? [
+                                      ...(selectedPeriodEval ? [
+                                        { key: 'latestDate', label: '최근 측정일' },
+                                        ...(((selectedPeriodEval.criteria?.itemNames && selectedPeriodEval.criteria.itemNames.length > 0)
+                                          ? selectedPeriodEval.criteria.itemNames
+                                          : (selectedPeriodEval.itemNames || [])).map(itemName => ({
+                                            key: `sub_${itemName}`,
+                                            label: itemName
+                                          }))),
+                                        { key: 'value', label: '총점(합산)' },
+                                        { key: 'evalGrade', label: '평가 결과' },
+                                        { key: 'rank', label: '순위' },
+                                      ] : selectedItem === 'theory-exam' ? [
                                         { key: 'quizTitle', label: '평가 제목' },
                                         { key: 'score', label: '점수' },
                                         { key: 'latestDate', label: '응시일' },
@@ -885,7 +1094,36 @@ export default function RecordBrowser({
                                             <TableCell className="p-1 text-center text-[11px] sm:text-xs">{s.classNum}</TableCell>
                                             <TableCell className="p-1 text-center text-[11px] sm:text-xs">{s.studentNum}</TableCell>
                                             <TableCell className="p-1 text-left font-bold whitespace-nowrap text-[11px] sm:text-xs">{s.name}</TableCell>
-                                            {selectedItem === 'theory-exam' ? (
+                                            {selectedPeriodEval ? (
+                                                <>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).latestDate || '-'}</TableCell>
+                                                    {(((selectedPeriodEval.criteria?.itemNames && selectedPeriodEval.criteria.itemNames.length > 0)
+                                                      ? selectedPeriodEval.criteria.itemNames
+                                                      : (selectedPeriodEval.itemNames || [])).map(itemName => {
+                                                        const score = (s as any).itemScores?.[itemName];
+                                                        return (
+                                                          <TableCell key={itemName} className="p-1 text-center text-[11px] sm:text-xs">
+                                                            {score !== null && score !== undefined ? `${score}개` : <span className="text-muted-foreground/50">-</span>}
+                                                          </TableCell>
+                                                        );
+                                                    }))}
+                                                    <TableCell className="p-1 text-center font-bold text-primary whitespace-nowrap text-[11px] sm:text-xs">
+                                                        {(s as any).value !== null && (s as any).value !== undefined ? `${(s as any).value}점` : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">
+                                                        {(s as any).evalGrade === '잘함' ? (
+                                                          <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0 font-bold">잘함</Badge>
+                                                        ) : (s as any).evalGrade === '보통' ? (
+                                                          <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0 font-bold">보통</Badge>
+                                                        ) : (s as any).evalGrade === '노력요함' ? (
+                                                          <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0 font-bold">노력요함</Badge>
+                                                        ) : (
+                                                          <span className="text-muted-foreground">-</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="p-1 text-center whitespace-nowrap text-[11px] sm:text-xs">{(s as any).rank ? `${(s as any).rank}/${(s as any).totalRanked}` : '-'}</TableCell>
+                                                </>
+                                            ) : selectedItem === 'theory-exam' ? (
                                                 <>
                                                     <TableCell className="p-1 max-w-[150px] truncate text-[11px] sm:text-xs">{(s as any).quizTitle}</TableCell>
                                                     <TableCell className="p-1 text-center font-semibold text-[11px] sm:text-xs">{(s as any).score}</TableCell>

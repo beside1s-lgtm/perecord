@@ -60,11 +60,20 @@ export type MeasurementRecord = {
   weight?: number; // BMI용 몸무게 데이터
 };
 
+export type PeriodEvaluationCriteria = {
+  highMin: number;   // 잘함 최소 점수 (예: 8)
+  midMin: number;    // 보통 최소 점수 (예: 5)
+  // 0 ~ (midMin - 1)은 노력요함
+  itemNames?: string[]; // 합산할 하위 종목명 목록 (미지정 시 해당 주간 활성 종목)
+};
+
 export type MeasurementPeriod = {
   id: string;
-  name: string; // 예: 1차 측정, 2차 측정
+  name: string; // 예: 1차 측정, 피클볼 평가 등
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
+  itemNames?: string[]; // 해당 측정 주간에 포함된 종목 이름 목록
+  criteria?: PeriodEvaluationCriteria; // 종합 평가 기준
 };
 
 export type ItemStatistics = {
